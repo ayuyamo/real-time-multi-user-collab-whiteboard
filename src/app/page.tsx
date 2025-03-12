@@ -3,12 +3,13 @@ import { useEffect, useState, useRef, MouseEvent } from 'react';
 import io, { Socket } from 'socket.io-client';
 import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
-interface Point { // represents a coordinate on the canvas where a user draws
+
+interface Point {
   x: number;
   y: number;
 }
 
-// // Create a socket connection with the server
+// Create a socket connection with the server
 let socket: Socket | null = null;
 
 const Whiteboard = () => {
@@ -22,16 +23,16 @@ const Whiteboard = () => {
   const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
 
   socket = getSocket(); // Get the socket instance
+
   // Function to get the canvas position
   const getCanvasPos = (e: MouseEvent<HTMLCanvasElement>): Point => {
-    if (!canvasRef.current) { // If the canvas is not loaded yet
+    if (!canvasRef.current) {
       return { x: 0, y: 0 };
     }
-    // conver the mouse position to canvas position
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect(); // Get the canvas position and size relative to the viewport
-    const x = e.clientX - rect.left; // Get the x position
-    const y = e.clientY - rect.top; // Get the y position
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     return { x, y };
   };
@@ -47,46 +48,14 @@ const Whiteboard = () => {
     if (!isDrawing) return;
 
     const newLine = [...currentLine, getCanvasPos(e)];
+    socket?.emit('draw', newLine);
     setCurrentLine(newLine);
-
-    // Draw the current line in real-time
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.strokeStyle = 'black'; // Set the color of the lines
-        ctx.lineWidth = 2; // Set the width of the lines
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
-        lines.forEach((line) => {
-          ctx.beginPath();
-          line.forEach((point, index) => {
-            if (index === 0) {
-              ctx.moveTo(point.x, point.y);
-            } else {
-              ctx.lineTo(point.x, point.y);
-            }
-          });
-          ctx.stroke();
-        });
-        // Draw the current line
-        ctx.beginPath();
-        currentLine.forEach((point, index) => {
-          if (index === 0) {
-            ctx.moveTo(point.x, point.y);
-          } else {
-            ctx.lineTo(point.x, point.y);
-          }
-        });
-        ctx.stroke();
-      }
-    }
   };
 
   // Stop drawing
   const stopDrawing = () => {
     setIsDrawing(false);
     setLines((prevLines) => [...prevLines, currentLine]);
-    socket?.emit('draw', currentLine);
     setCurrentLine([]);
   };
 
@@ -94,34 +63,35 @@ const Whiteboard = () => {
   useEffect(() => {
     socket?.on('draw', (line: Point[]) => {
       setLines((prevLines) => [...prevLines, line]);
+      setCurrentLine(line);
     });
     return () => {
       socket?.off('draw');
+      setCurrentLine([]);
     };
   }, []);
 
-  // Draw lines on canvas
+  // Redraw all lines (including from other users) every time the lines state changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
-      const ctx = canvas.getContext('2d'); // Get the 2D context of the canvas
+      const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.strokeStyle = 'red'; // Set the color of the lines
-        ctx.lineWidth = 2; // Set the width of the lines
-        lines.forEach((line) => {
-          ctx.beginPath(); // Start a new path
-          line.forEach((point, index) => {
-            if (index === 0) { // Move to the first point
+        // Draw the current line
+        if (currentLine.length > 0) {
+          ctx.beginPath();
+          currentLine.forEach((point, index) => {
+            if (index === 0) {
               ctx.moveTo(point.x, point.y);
             } else {
               ctx.lineTo(point.x, point.y);
             }
           });
           ctx.stroke();
-        });
+        }
       }
     }
-  }, [lines]);
+  }, [currentLine]);
 
   // Disconnect the socket when the component is unmounted
   useEffect(() => {
