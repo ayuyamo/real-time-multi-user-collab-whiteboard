@@ -1,103 +1,148 @@
-import Image from "next/image";
+'use client';
+import { useEffect, useState, useRef, MouseEvent } from 'react';
+import io, { Socket } from 'socket.io-client';
+import { initSocketServer } from '@/pages/api/server-init';
+import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
+interface Point { // represents a coordinate on the canvas where a user draws
+  x: number;
+  y: number;
+}
 
-export default function Home() {
+// // Create a socket connection with the server
+let socket: Socket | null = null;
+
+const Whiteboard = () => {
+  useEffect(() => {
+    initSocketServer(); // Initialize the WebSocket server
+  }, []);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
+  const [isDrawing, setIsDrawing] = useState<boolean>(false); // State to check if the user is drawing
+  const [lines, setLines] = useState<Point[][]>([]); // State to store the lines drawn by the user
+  const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
+
+  socket = getSocket(); // Get the socket instance
+  // Function to get the canvas position
+  const getCanvasPos = (e: MouseEvent<HTMLCanvasElement>): Point => {
+    if (!canvasRef.current) { // If the canvas is not loaded yet
+      return { x: 0, y: 0 };
+    }
+    // conver the mouse position to canvas position
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect(); // Get the canvas position and size relative to the viewport
+    const x = e.clientX - rect.left; // Get the x position
+    const y = e.clientY - rect.top; // Get the y position
+
+    return { x, y };
+  };
+
+  // Start drawing
+  const startDrawing = (e: MouseEvent<HTMLCanvasElement>) => {
+    setIsDrawing(true);
+    setCurrentLine([getCanvasPos(e)]);
+  };
+
+  // Draw on canvas
+  const draw = (e: MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+
+    const newLine = [...currentLine, getCanvasPos(e)];
+    setCurrentLine(newLine);
+
+    // Draw the current line in real-time
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.strokeStyle = 'black'; // Set the color of the lines
+        ctx.lineWidth = 2; // Set the width of the lines
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+        lines.forEach((line) => {
+          ctx.beginPath();
+          line.forEach((point, index) => {
+            if (index === 0) {
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.stroke();
+        });
+        // Draw the current line
+        ctx.beginPath();
+        currentLine.forEach((point, index) => {
+          if (index === 0) {
+            ctx.moveTo(point.x, point.y);
+          } else {
+            ctx.lineTo(point.x, point.y);
+          }
+        });
+        ctx.stroke();
+      }
+    }
+  };
+
+  // Stop drawing
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    setLines((prevLines) => [...prevLines, currentLine]);
+    socket?.emit('draw', currentLine);
+    setCurrentLine([]);
+  };
+
+  // Socket listener to receive drawn lines from other users
+  useEffect(() => {
+    socket?.on('draw', (line: Point[]) => {
+      setLines((prevLines) => [...prevLines, line]);
+    });
+    return () => {
+      socket?.off('draw');
+    };
+  }, []);
+
+  // Draw lines on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d'); // Get the 2D context of the canvas
+      if (ctx) {
+        ctx.strokeStyle = 'red'; // Set the color of the lines
+        ctx.lineWidth = 2; // Set the width of the lines
+        lines.forEach((line) => {
+          ctx.beginPath(); // Start a new path
+          line.forEach((point, index) => {
+            if (index === 0) { // Move to the first point
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.stroke();
+        });
+      }
+    }
+  }, [lines]);
+
+  // Disconnect the socket when the component is unmounted
+  useEffect(() => {
+    return () => {
+      disconnectSocket();
+    };
+  }, []);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={600}
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={stopDrawing}
+        style={{ border: '1px solid black', backgroundColor: 'white' }}
+      />
     </div>
   );
-}
+};
+
+export default Whiteboard;

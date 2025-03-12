@@ -1,0 +1,38 @@
+import { Server } from 'socket.io';
+
+// Disable body parsing and set up an external resolver for Socket.io
+export const config = {
+  api: {
+    bodyParser: false, // Disable body parsing
+    externalResolver: true, // Use an external resolver
+  },
+};
+
+let io;
+
+const SocketHandler = (req, res) => {
+  if (!res.socket.server.io) {
+    console.log("Starting socket.io server...");
+    io = new Server(res.socket.server);
+    res.socket.server.io = io;
+
+    // Handle incoming connections
+    io.on('connection', (socket) => {
+      console.log('Client connected', socket.id);
+
+      // listen for drawing events from the client
+      socket.on('draw', (line) => {
+          console.log('draw', line);
+          socket.broadcast.emit('draw', line); // broadcast drawing to all other clients
+      });
+
+      // Handle user disconnection
+      socket.on('disconnect', () => {
+          console.log('Client disconnected', socket.id);
+      });
+    });
+  }
+  res.end();
+}
+
+export default SocketHandler;
