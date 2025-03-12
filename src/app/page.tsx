@@ -4,7 +4,7 @@ import { Socket } from 'socket.io-client';
 import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
 import saveStroke from '@/pages/api/supabase/saveStrokes';
-
+import supabase from '@/pages/api/supabase/supabase-auth';
 interface Point {
   x: number;
   y: number;
@@ -56,15 +56,49 @@ const Whiteboard = () => {
   // Stop drawing
   const stopDrawing = async () => {
     setIsDrawing(false);
-    setLines((prevLines) => [...prevLines, currentLine]);
     await saveStroke({ drawing: currentLine, name: 'halie' });
     setCurrentLine([]);
   };
 
+  // Fetch all the lines from the server when the component mounts
+  useEffect(() => {
+    const fetchLines = async () => {
+      const { data, error } = await supabase.from('drawing-rooms').select('drawing');
+      if (error) {
+        console.error('Error fetching lines:', error.message);
+        return;
+      } else {
+        setLines(data.map((line: any) => line.drawing));
+      }
+    };
+    fetchLines();
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        lines.forEach((line) => {
+          ctx.beginPath();
+          line.forEach((point, index) => {
+            if (index === 0) {
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.stroke();
+        });
+      }
+    }
+  }, [lines]);
+
+
   // Socket listener to receive drawn lines from other users
   useEffect(() => {
     socket?.on('draw', (line: Point[]) => {
-      setLines((prevLines) => [...prevLines, line]);
       setCurrentLine(line);
     });
     return () => {
@@ -73,7 +107,7 @@ const Whiteboard = () => {
     };
   }, []);
 
-  // Redraw all lines (including from other users) every time the lines state changes
+  // draw line 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
