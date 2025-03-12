@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState, useRef, MouseEvent } from 'react';
-import io, { Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
+import saveStroke from '@/pages/api/supabase/saveStrokes';
 
 interface Point {
   x: number;
@@ -48,14 +49,15 @@ const Whiteboard = () => {
     if (!isDrawing) return;
 
     const newLine = [...currentLine, getCanvasPos(e)];
-    socket?.emit('draw', newLine);
     setCurrentLine(newLine);
+    socket?.emit('draw', newLine);
   };
 
   // Stop drawing
-  const stopDrawing = () => {
+  const stopDrawing = async () => {
     setIsDrawing(false);
     setLines((prevLines) => [...prevLines, currentLine]);
+    await saveStroke({ drawing: currentLine, name: 'halie' });
     setCurrentLine([]);
   };
 
