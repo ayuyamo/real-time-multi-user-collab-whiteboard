@@ -1,11 +1,20 @@
 'use client';
 import { useEffect, useState, useRef, MouseEvent } from 'react';
 import { Socket } from 'socket.io-client';
-import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
 import saveStroke from '@/pages/api/supabase/saveStrokes';
 import supabase from '@/pages/api/supabase/supabase-auth';
-import { Point, WhiteboardProps } from '@/types';
+import { User } from '@supabase/supabase-js';
+
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface WhiteboardProps {
+    user: User;
+}
+
 // Create a socket connection with the server
 let socket: Socket | null = null;
 

@@ -2,11 +2,12 @@
 import LoginPage from "./login/page";
 import { useEffect, useState } from "react";
 import supabase from '../pages/api/supabase/supabase-auth';
-import Whiteboard from "./whiteboard/page";
+import Whiteboard from '@/components/Whiteboard'
 import { initSocketServer } from "@/pages/api/server-init";
+import { User } from "@supabase/supabase-js";
 const HomePage = () => {
   // Fetch user and assign color
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     initSocketServer(); // Initialize the WebSocket server
