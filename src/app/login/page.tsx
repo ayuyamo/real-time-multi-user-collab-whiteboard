@@ -18,7 +18,7 @@ const LoginPage = () => {
         const { data, error } = await supabase.auth.signInWithOtp({
             email: emailAddress,
             options: {
-                emailRedirectTo: window.location.origin,
+                emailRedirectTo: 'https://real-time-multi-user-collab-white-git-d04a81-halie-dos-projects.vercel.app/',
             },
         });
 
