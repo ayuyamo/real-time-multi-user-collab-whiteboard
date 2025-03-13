@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useState, useRef, MouseEvent } from 'react';
 import { Socket } from 'socket.io-client';
-import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
-import saveStroke from '@/pages/api/supabase/saveStrokes';
-import supabase from '@/pages/api/supabase/supabase-auth';
+// import { getSocket, disconnectSocket } from '@/components/client-socket';
+import saveStroke from '@/components/supabase/saveStrokes';
+import supabase from '@/components/supabase/supabase-auth';
 import { User } from '@supabase/supabase-js';
-
+import { io } from 'socket.io-client';
 interface Point {
     x: number;
     y: number;
@@ -32,13 +32,32 @@ const generateColor = (id: string) => {
 const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
     const [isDrawing, setIsDrawing] = useState<boolean>(false); // State to check if the user is drawing
-    // const [lines, setLines] = useState<Point[][]>([]); // State to store the lines drawn by the user
     const [lines, setLines] = useState<{ drawing: Point[]; color: string }[]>([]); // State to store lines with color
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
     const [userColor, setUserColor] = useState<string>('black');
     const [userId, setUserId] = useState<string | null>(null);
+    useEffect(() => {
+        // Connect to the Socket.IO server
+        socket = io();
 
-    socket = getSocket(); // Get the socket instance
+        // Handle connection events
+        socket.on('connect', () => {
+            console.log('Connected to the server:', socket?.id);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from the server');
+        });
+
+        socket.on('message', (data) => {
+            console.log('Received message:', data);
+        });
+
+        // Clean up on unmount
+        return () => {
+            socket?.disconnect();
+        };
+    }, []);
 
     // Fetch user and assign color
     useEffect(() => {
@@ -161,13 +180,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             }
         }
     }, [currentLine]);
-
-    // Disconnect the socket when the component is unmounted
-    useEffect(() => {
-        return () => {
-            disconnectSocket();
-        };
-    }, []);
 
     // Function to sign out the user
     const handleSignOut = async () => {

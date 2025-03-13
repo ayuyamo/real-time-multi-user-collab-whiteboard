@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import supabase from '@/pages/api/supabase/supabase-auth';
+import supabase from '@/components/supabase/supabase-auth';
 
 const LoginPage = () => {
     const [emailAddress, setEmailAddress] = useState<string>('');

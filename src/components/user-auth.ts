@@ -1,4 +1,4 @@
-import supabase from '../pages/api/supabase/supabase-auth';
+import supabase from './supabase/supabase-auth';
 
 async function signUpNewUser(userEmail: string, userPassword: string) {
   const { data, error } = await supabase.auth.signUp({

@@ -1,17 +1,20 @@
 'use client';
 import LoginPage from "./login/page";
 import { useEffect, useState } from "react";
-import supabase from '../pages/api/supabase/supabase-auth';
+import supabase from '../components/supabase/supabase-auth';
 import Whiteboard from '@/components/Whiteboard'
-import { initSocketServer } from "@/pages/api/server-init";
 import { User } from "@supabase/supabase-js";
+
+
 const HomePage = () => {
   // Fetch user and assign color
   const [user, setUser] = useState<User | null>(null);
 
-  // useEffect(() => {
-  //   initSocketServer(); // Initialize the WebSocket server
-  // }, []);
+  useEffect(() => {
+    // Initialize the Socket.IO server
+    fetch('/api/socket');
+    console.log('Server initialized');
+  }, []);
 
   useEffect(() => {
     // Listen for authentication state changes
