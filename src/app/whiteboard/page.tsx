@@ -5,16 +5,7 @@ import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
 import saveStroke from '@/pages/api/supabase/saveStrokes';
 import supabase from '@/pages/api/supabase/supabase-auth';
-
-export interface Point {
-    x: number;
-    y: number;
-}
-
-export interface WhiteboardProps {
-    user: any;
-}
-
+import { Point, WhiteboardProps } from '@/types';
 // Create a socket connection with the server
 let socket: Socket | null = null;
 
