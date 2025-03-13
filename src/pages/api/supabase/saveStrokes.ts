@@ -2,13 +2,13 @@ import supabase from './supabase-auth';
 
 interface Stroke {
   drawing: { x: number; y: number }[];
-  name: string;
+  color: string;
 }
 // Function to save a stroke
-async function saveStroke({ drawing, name }: Stroke) {
+async function saveStroke({ drawing, color }: Stroke) {
   const { data, error } = await supabase
     .from('drawing-rooms')
-    .insert([{ drawing: drawing, name: name }]);
+    .insert([{ drawing: drawing, color: color }]);
 
   if (error) {
     console.error('Error saving stroke:', error);
