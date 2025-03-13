@@ -9,9 +9,9 @@ const HomePage = () => {
   // Fetch user and assign color
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    initSocketServer(); // Initialize the WebSocket server
-  }, []);
+  // useEffect(() => {
+  //   initSocketServer(); // Initialize the WebSocket server
+  // }, []);
 
   useEffect(() => {
     // Listen for authentication state changes

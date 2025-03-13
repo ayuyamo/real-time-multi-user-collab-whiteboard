@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-
+//TODO: make this a websocket 
 // Disable body parsing and set up an external resolver for Socket.io
 export const config = {
   api: {

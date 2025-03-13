@@ -3,7 +3,7 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    socket = io({
+    socket = io('/api/server-socket', {
       reconnection: true, // Disable reconnection
       autoConnect: true,
     });
