@@ -5,12 +5,13 @@ import { initSocketServer } from '@/pages/api/server-init';
 import { getSocket, disconnectSocket } from '@/pages/api/client-socket';
 import saveStroke from '@/pages/api/supabase/saveStrokes';
 import supabase from '@/pages/api/supabase/supabase-auth';
-interface Point {
+
+export interface Point {
     x: number;
     y: number;
 }
 
-interface WhiteboardProps {
+export interface WhiteboardProps {
     user: any;
 }
 
@@ -29,10 +30,6 @@ const generateColor = (id: string) => {
 };
 
 const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
-    useEffect(() => {
-        initSocketServer(); // Initialize the WebSocket server
-    }, []);
-
     const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
     const [isDrawing, setIsDrawing] = useState<boolean>(false); // State to check if the user is drawing
     // const [lines, setLines] = useState<Point[][]>([]); // State to store the lines drawn by the user

@@ -3,9 +3,14 @@ import LoginPage from "./login/page";
 import { useEffect, useState } from "react";
 import supabase from '../pages/api/supabase/supabase-auth';
 import Whiteboard from "./whiteboard/page";
+import { initSocketServer } from "@/pages/api/server-init";
 const HomePage = () => {
   // Fetch user and assign color
   const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    initSocketServer(); // Initialize the WebSocket server
+  }, []);
 
   useEffect(() => {
     // Listen for authentication state changes
