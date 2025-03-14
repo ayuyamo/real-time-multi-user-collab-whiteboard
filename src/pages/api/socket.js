@@ -13,7 +13,7 @@ let io;
 const SocketHandler = (req, res) => {
   if (!res.socket.server.io) {
     console.log("Starting socket.io server...");
-    io = new Server(res.socket.server);
+    io = new Server(res.socket.server, {path: '/api/socket'});
     res.socket.server.io = io;
 
     // Handle incoming connections
