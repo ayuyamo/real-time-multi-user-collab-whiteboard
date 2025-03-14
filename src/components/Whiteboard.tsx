@@ -38,7 +38,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [userId, setUserId] = useState<string | null>(null);
     useEffect(() => {
         // Connect to the Socket.IO server
-        socket = io({ path: '/api/socket' });
+        socket = io();
 
         // Handle connection events
         socket.on('connect', () => {
@@ -166,7 +166,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 // Draw the current line
                 if (currentLine.length > 0) {
-                    ctx.strokeStyle = userColor;
+                    ctx.strokeStyle = userColor; // TODO: when 'draw' is emitted send the colors associated with the person drawing too for accurate display of whiteboard in real time
                     ctx.beginPath();
                     currentLine.forEach((point, index) => {
                         if (index === 0) {
