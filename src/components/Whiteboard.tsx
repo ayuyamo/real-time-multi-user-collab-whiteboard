@@ -38,7 +38,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [userId, setUserId] = useState<string | null>(null);
     useEffect(() => {
         // Connect to the Socket.IO server
-        socket = io();
+        socket = io({ path: '/api/socket' });
 
         // Handle connection events
         socket.on('connect', () => {
