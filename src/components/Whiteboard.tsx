@@ -101,6 +101,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     // Stop drawing
     const stopDrawing = async () => {
         setIsDrawing(false);
+        // Emit stop drawing event to the server
+        socket?.emit('stopDrawing');
+
         await saveStroke({ drawing: currentLine, color: userColor });
         setCurrentLine([]);
     };
@@ -149,17 +152,17 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
     // Socket listener to receive drawn lines from other users
     useEffect(() => {
-        const tmpColor: string = userColor; // Store the color for the current use
         socket?.on('draw', (line: Point[], color: string) => {
-            console.log('Received line:', line);
-            console.log('Received color:', color);
             setUserColor(color); // Update the color for the current user
             setCurrentLine(line);
         });
+        socket?.on('stopDrawing', () => {
+            setUserColor(generateColor(user.id)); // Update the color for the current user
+            setCurrentLine([]); // Clear the current line
+        });
         return () => {
             socket?.off('draw');
-            setCurrentLine([]);
-            setUserColor(tmpColor);
+            socket?.off('stopDrawing');
         };
     }, []);
 
@@ -197,7 +200,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             <div style={{ marginBottom: '10px' }}>
                 {userId ? (
                     <>
-                        <span style={{ color: userColor, fontWeight: 'bold' }}>
+                        <span style={{ color: generateColor(userId), fontWeight: 'bold' }}>
                             Signed in as: {userId} (Color: {userColor})
                         </span>
                         <button

@@ -25,6 +25,11 @@ const SocketHandler = (req, res) => {
           console.log('draw', line);
           socket.broadcast.emit('draw', line, color); // broadcast drawing to all other clients
       });
+      // listen for stop drawing event from the client
+      socket.on('stopDrawing', () => {
+          console.log('stop drawing signal received');
+          socket.broadcast.emit('stopDrawing'); // broadcast drawing to all other clients
+      });
 
       // Handle user disconnection
       socket.on('disconnect', () => {
