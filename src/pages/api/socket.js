@@ -21,9 +21,9 @@ const SocketHandler = (req, res) => {
       console.log('Client connected', socket.id);
 
       // listen for drawing events from the client
-      socket.on('draw', (line) => {
+      socket.on('draw', (line, color) => {
           console.log('draw', line);
-          socket.broadcast.emit('draw', line); // broadcast drawing to all other clients
+          socket.broadcast.emit('draw', line, color); // broadcast drawing to all other clients
       });
 
       // Handle user disconnection
