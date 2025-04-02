@@ -201,7 +201,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                 {userId ? (
                     <>
                         <span style={{ color: generateColor(userId), fontWeight: 'bold' }}>
-                            Signed in as: {userId} (Color: {userColor})
+                            Signed in as: {userId} (Color: {generateColor(userId)})
                         </span>
                         <button
                             onClick={handleSignOut}
