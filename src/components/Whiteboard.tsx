@@ -150,9 +150,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     // Socket listener to receive drawn lines from other users
     useEffect(() => {
         const tmpColor: string = userColor; // Store the color for the current use
-        socket?.on('draw', (line: Point[], color: string) => {
-            setUserColor(color); // Update the color for the current user
-            setCurrentLine(line);
+        socket?.on('draw', (data: { line: Point[], color: string }) => {
+            setUserColor(data.color); // Update the color for the current user
+            setCurrentLine(data.line);
         });
         return () => {
             socket?.off('draw');
