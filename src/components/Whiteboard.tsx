@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useState, useRef, MouseEvent } from 'react';
 import { Socket } from 'socket.io-client';
-// import { getSocket, disconnectSocket } from '@/components/client-socket';
 import saveStroke from '@/components/supabase/saveStrokes';
 import supabase from '@/components/supabase/supabase-auth';
 import { User } from '@supabase/supabase-js';
 import { io } from 'socket.io-client';
+
 interface Point {
     x: number;
     y: number;
@@ -36,6 +36,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
     const [userColor, setUserColor] = useState<string>('black');
     const [userId, setUserId] = useState<string | null>(null);
+
     useEffect(() => {
         // Connect to the Socket.IO server
         socket = io({ path: '/api/socket' });
@@ -127,6 +128,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         fetchLines();
     }, []);
 
+    // Redraw all lines when the component mounts
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -196,44 +198,35 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ marginBottom: '10px' }}>
-                {userId ? (
-                    <>
-                        <span style={{ color: generateColor(userId), fontWeight: 'bold' }}>
-                            Signed in as: {userId} (Color: {generateColor(userId)})
-                        </span>
+        <div className='flex flex-col items-center justify-center h-screen border border-amber-500 relative'>
+            {userId ? (
+                <div>
+                    <canvas className='fixed top-0 left-0 w-full h-full z-0 bg-white'
+                        ref={canvasRef}
+                        width={window.innerWidth}
+                        height={window.innerHeight}
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                    />
+
+                    <div className="absolute top-0 right-0 bg-white p-3 rounded shadow opacity-0 hover:opacity-100 transition-opacity duration-300">
+                        <p className="text-sm font-semibold text-black">👤 User: {userId}</p>
                         <button
                             onClick={handleSignOut}
-                            style={{
-                                marginLeft: '10px',
-                                padding: '5px 10px',
-                                backgroundColor: 'red',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '5px',
-                                cursor: 'pointer',
-                            }}
+                            className="mt-2 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
                         >
                             Sign Out
                         </button>
-                        <canvas
-                            ref={canvasRef}
-                            width={800}
-                            height={600}
-                            onMouseDown={startDrawing}
-                            onMouseMove={draw}
-                            onMouseUp={stopDrawing}
-                            style={{ border: '1px solid black', backgroundColor: 'white' }}
-                        />
-                    </>
-                ) : (
-                    <span style={{ fontWeight: 'bold', color: 'gray' }}>
-                        Not signed in
-                    </span>
-                )}
-            </div>
 
+                    </div>
+                </div>
+
+            ) : (
+                <span style={{ fontWeight: 'bold', color: 'gray' }}>
+                    Loading ...
+                </span>
+            )}
         </div>
     );
 };

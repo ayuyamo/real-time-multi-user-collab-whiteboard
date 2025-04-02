@@ -8,7 +8,13 @@ interface Stroke {
 async function saveStroke({ drawing, color }: Stroke) {
   const { data, error } = await supabase
     .from('drawing-rooms')
-    .insert([{ drawing: drawing, color: color }]);
+    .insert([
+      {
+        drawing: drawing,
+        color: color,
+        user_id: (await supabase.auth.getUser()).data.user?.id,
+      },
+    ]);
 
   if (error) {
     console.error('Error saving stroke:', error);
