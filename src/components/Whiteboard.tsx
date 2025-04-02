@@ -95,7 +95,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         const newLine = [...currentLine, getCanvasPos(e)];
         setCurrentLine(newLine);
-        socket?.emit('draw', newLine);
+        socket?.emit('draw', { drawing: newLine, color: userColor }); // Emit the drawing event to the server
     };
 
     // Stop drawing
