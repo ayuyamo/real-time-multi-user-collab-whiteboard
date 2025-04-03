@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef, MouseEvent } from 'react';
+import { useEffect, useState, useRef, MouseEvent, use } from 'react';
 import { Socket } from 'socket.io-client';
 import saveStroke from '@/components/supabase/saveStrokes';
 import supabase from '@/components/supabase/supabase-auth';
@@ -40,6 +40,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
     const [offsetY, setOffsetY] = useState(0); // Vertical pan offset
     const [scale, setScale] = useState(1); // Zoom level
+    const [fetchTrigger, setFetchTrigger] = useState(false); // Trigger to fetch lines from the server
 
     // convert coordinates
     const toScreenX = (xTrue: number) => {
@@ -110,8 +111,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         socket?.emit('stopDrawing'); // Emit the stop drawing event to the server
         await saveStroke({ drawing: currentLine, color: userColor });
-        setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
-        console.log("lines updated: include ", currentLine, userColor);
         setCurrentLine([]);
     };
 
@@ -169,7 +168,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         setOffsetX(offsetX - unitsAddLeft); // Update horizontal offset
         setOffsetY(offsetY - unitsAddTop); // Update vertical offset
-
+        setFetchTrigger(!fetchTrigger); // Trigger fetch
         setRedrawTrigger(!redrawTrigger); // Trigger redraw
     };
 
@@ -221,11 +220,11 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     color: item.color, // color
                 }));
                 setLines(formattedLines); // Update state with fetched lines
-                setRedrawTrigger(!redrawTrigger); // Trigger redraw
+                // setRedrawTrigger(!redrawTrigger); // Trigger redraw
             }
         };
         fetchLines();
-    }, []);
+    }, [fetchTrigger]);
 
     // Redraw all lines when the component mounts
     useEffect(() => {
@@ -286,10 +285,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         socket?.on('stopDrawing', () => {
             console.log("stopDrawing event received by user", userId);
             console.log('currentLine: ', currentLine);
-            setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
+            // setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
             console.log("lines updated (other client): include ", currentLine, userColor);
-            setUserColor(generateColor(user.id)); // Update the color for the current user
-            setCurrentLine([]); // Clear the current line
+            // setUserColor(generateColor(user.id)); // Update the color for the current user
+            // setCurrentLine([]); // Clear the current line
         });
         return () => {
             socket?.off('draw');
