@@ -105,12 +105,13 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     };
 
     // Stop drawing
-    const stopDrawing = async () => {
+    const stopDrawing = async () => { // TODO: make sure once a drawing is complete the lines dont disappear when zoom in/out
         setIsDrawing(false);
-        // Emit stop drawing event to the server
-        socket?.emit('stopDrawing');
 
+        socket?.emit('stopDrawing'); // Emit the stop drawing event to the server
         await saveStroke({ drawing: currentLine, color: userColor });
+        setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
+        console.log("lines updated: include ", currentLine, userColor);
         setCurrentLine([]);
     };
 
@@ -152,7 +153,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
     const onMouseWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
         const deltaY = e.deltaY;
-        const scaleAmount = -deltaY / 100; // Adjust the scale amount as needed
+        const scaleAmount = -deltaY / 200; // Adjust the scale amount as needed
         setScale(scale * (1 + scaleAmount)); // Update the scale
 
         var distX = e.pageX / canvasRef.current!.clientWidth;
@@ -220,6 +221,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     color: item.color, // color
                 }));
                 setLines(formattedLines); // Update state with fetched lines
+                setRedrawTrigger(!redrawTrigger); // Trigger redraw
             }
         };
         fetchLines();
@@ -246,7 +248,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                 });
             }
         }
-    }, [lines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
+    }, [redrawTrigger]); // Redraw when lines change or redrawTrigger changes
 
     // draw line 
     useEffect(() => {
@@ -256,6 +258,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 // Draw the current line
                 if (currentLine.length > 1) {
+                    console.log('user id is: ', userId);
+                    console.log('user color is: ', generateColor(userId!));
                     ctx.strokeStyle = userColor;
                     ctx.beginPath();
 
@@ -280,6 +284,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             setCurrentLine(line);
         });
         socket?.on('stopDrawing', () => {
+            console.log("stopDrawing event received by user", userId);
+            console.log('currentLine: ', currentLine);
+            setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
+            console.log("lines updated (other client): include ", currentLine, userColor);
             setUserColor(generateColor(user.id)); // Update the color for the current user
             setCurrentLine([]); // Clear the current line
         });
