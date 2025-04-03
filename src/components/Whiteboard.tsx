@@ -37,6 +37,141 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [userColor, setUserColor] = useState<string>('black');
     const [userId, setUserId] = useState<string | null>(null);
 
+    const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
+    const [offsetY, setOffsetY] = useState(0); // Vertical pan offset
+    const [scale, setScale] = useState(1); // Zoom level
+
+    // convert coordinates
+    const toScreenX = (xTrue: number) => {
+        return (xTrue + offsetX) * scale;
+    }
+    const toScreenY = (yTrue: number) => {
+        return (yTrue + offsetY) * scale;
+    }
+    const toTrueX = (xScreen: number) => {
+        return (xScreen / scale) - offsetX;
+    }
+    const toTrueY = (yScreen: number) => {
+        return (yScreen / scale) - offsetY;
+    }
+    const trueHeight = () => {
+        if (!canvasRef.current) {
+            throw new Error("Canvas reference is not set");
+        }
+        return canvasRef.current.clientHeight / scale;
+    }
+    const trueWidth = (): number => {
+        if (!canvasRef.current) {
+            throw new Error("Canvas reference is not set");
+        }
+        return canvasRef.current.clientWidth / scale;
+    };
+
+
+    // Function to get the canvas position
+    const getCanvasPos = (e: MouseEvent<HTMLCanvasElement>): Point => {
+        if (!canvasRef.current) {
+            return { x: 0, y: 0 };
+        }
+        // const rect = canvas.getBoundingClientRect();
+        const x = e.pageX;
+        const y = e.pageY;
+
+        return { x, y };
+    };
+
+
+    // Start drawing
+    const startDrawing = (e: MouseEvent<HTMLCanvasElement>) => {
+        setIsDrawing(true);
+        const newPoint: Point = {
+            x: toTrueX(getCanvasPos(e).x),
+            y: toTrueY(getCanvasPos(e).y),
+        }
+        setCurrentLine([newPoint]);
+    };
+
+    // Draw on canvas
+    const draw = (e: MouseEvent<HTMLCanvasElement>) => {
+        if (!isDrawing) return;
+        const newPoint: Point = {
+            x: toTrueX(getCanvasPos(e).x),
+            y: toTrueY(getCanvasPos(e).y),
+        };
+        const newLine = [...currentLine, newPoint];
+        setCurrentLine(newLine);
+
+        socket?.emit('draw', newLine, userColor); // Emit the drawing event to the server
+    };
+
+    // Stop drawing
+    const stopDrawing = async () => {
+        setIsDrawing(false);
+        // Emit stop drawing event to the server
+        socket?.emit('stopDrawing');
+
+        await saveStroke({ drawing: currentLine, color: userColor });
+        setCurrentLine([]);
+    };
+
+    const [leftMouseDown, setLeftMouseDown] = useState(false);
+    const [rightMouseDown, setRightMouseDown] = useState(false);
+    const onMouseDown = (e: MouseEvent<HTMLCanvasElement>) => {
+        if (e.button === 0) { // Left mouse button
+            setLeftMouseDown(true);
+            setRightMouseDown(false);
+            startDrawing(e);
+        } else if (e.button === 2) { // Right mouse button
+            setRightMouseDown(true);
+            setLeftMouseDown(false);
+        }
+    };
+
+    const [redrawTrigger, setRedrawTrigger] = useState(false);
+
+    const onMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
+        if (leftMouseDown) {    // Left mouse button is down
+            draw(e);
+        } else if (rightMouseDown) { // Right mouse button is down
+            const dx = e.movementX / scale; // Movement in x direction
+            const dy = e.movementY / scale; // Movement in y direction
+            setOffsetX(offsetX + dx); // Update horizontal offset
+            setOffsetY(offsetY + dy); // Update vertical offset
+            setRedrawTrigger(!redrawTrigger); // Trigger redraw
+        }
+    };
+
+    const onMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
+        if (leftMouseDown) { // Left mouse button
+            setLeftMouseDown(false);
+            stopDrawing();
+        } else if (rightMouseDown) { // Right mouse button
+            setRightMouseDown(false);
+        }
+    }
+
+    const onMouseWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+        const deltaY = e.deltaY;
+        const scaleAmount = -deltaY / 100; // Adjust the scale amount as needed
+        setScale(scale * (1 + scaleAmount)); // Update the scale
+
+        var distX = e.pageX / canvasRef.current!.clientWidth;
+        var distY = e.pageY / canvasRef.current!.clientHeight;
+
+        // calculate how much we need to zoom
+        const unitsZoomedX = trueWidth() * scaleAmount; // this is the amount the true width is increasing/decreasing by after zooming
+        const unitsZoomedY = trueHeight() * scaleAmount; // this is the amount we zoomed in the y direction
+
+        // calculate how many pixels the cursor has moved in the x and y direction
+        const unitsAddLeft = unitsZoomedX * distX;
+        const unitsAddTop = unitsZoomedY * distY;
+
+        setOffsetX(offsetX - unitsAddLeft); // Update horizontal offset
+        setOffsetY(offsetY - unitsAddTop); // Update vertical offset
+
+        setRedrawTrigger(!redrawTrigger); // Trigger redraw
+    };
+
     useEffect(() => {
         // Connect to the Socket.IO server
         socket = io({ path: '/api/socket' });
@@ -71,44 +206,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         }
     }, []);
 
-    // Function to get the canvas position
-    const getCanvasPos = (e: MouseEvent<HTMLCanvasElement>): Point => {
-        if (!canvasRef.current) {
-            return { x: 0, y: 0 };
-        }
-        const canvas = canvasRef.current;
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        return { x, y };
-    };
-
-    // Start drawing
-    const startDrawing = (e: MouseEvent<HTMLCanvasElement>) => {
-        setIsDrawing(true);
-        setCurrentLine([getCanvasPos(e)]);
-    };
-
-    // Draw on canvas
-    const draw = (e: MouseEvent<HTMLCanvasElement>) => {
-        if (!isDrawing) return;
-
-        const newLine = [...currentLine, getCanvasPos(e)];
-        setCurrentLine(newLine);
-        socket?.emit('draw', newLine, userColor); // Emit the drawing event to the server
-    };
-
-    // Stop drawing
-    const stopDrawing = async () => {
-        setIsDrawing(false);
-        // Emit stop drawing event to the server
-        socket?.emit('stopDrawing');
-
-        await saveStroke({ drawing: currentLine, color: userColor });
-        setCurrentLine([]);
-    };
-
     // Fetch all the lines from the server when the component mounts
     useEffect(() => {
         const fetchLines = async () => {
@@ -140,16 +237,40 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     ctx.beginPath();
                     drawing.forEach((point, index) => {
                         if (index === 0) {
-                            ctx.moveTo(point.x, point.y);
-                        } else {
-                            ctx.lineTo(point.x, point.y);
+                            ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
+                        } else { // Draw line to the next point
+                            ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
                         }
                     });
-                    ctx.stroke();
+                    ctx.stroke(); // Stroke the path
                 });
             }
         }
-    }, [lines]);
+    }, [lines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
+
+    // draw line 
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                // Draw the current line
+                if (currentLine.length > 1) {
+                    ctx.strokeStyle = userColor;
+                    ctx.beginPath();
+
+                    const prevPoint = currentLine[currentLine.length - 2];
+                    const currentPoint = currentLine[currentLine.length - 1];
+
+                    // Move to the previous point
+                    ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
+                    // Draw a line to the current point
+                    ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
+                    ctx.stroke(); // Stroke the path
+                }
+            }
+        }
+    }, [currentLine]);
 
 
     // Socket listener to receive drawn lines from other users
@@ -168,29 +289,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         };
     }, []);
 
-    // draw line 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                // Draw the current line
-                if (currentLine.length > 0) {
-                    ctx.strokeStyle = userColor; // TODO: when 'draw' is emitted send the colors associated with the person drawing too for accurate display of whiteboard in real time
-                    ctx.beginPath();
-                    currentLine.forEach((point, index) => {
-                        if (index === 0) {
-                            ctx.moveTo(point.x, point.y);
-                        } else {
-                            ctx.lineTo(point.x, point.y);
-                        }
-                    });
-                    ctx.stroke();
-                }
-            }
-        }
-    }, [currentLine]);
-
     // Function to sign out the user
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -205,9 +303,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         ref={canvasRef}
                         width={window.innerWidth}
                         height={window.innerHeight}
-                        onMouseDown={startDrawing}
-                        onMouseMove={draw}
-                        onMouseUp={stopDrawing}
+                        onMouseDown={onMouseDown}
+                        onMouseMove={onMouseMove}
+                        onMouseUp={onMouseUp}
+                        onWheel={onMouseWheel}
                     />
 
                     <div className="absolute top-0 right-0 bg-white p-3 rounded shadow opacity-0 hover:opacity-100 transition-opacity duration-300">
