@@ -245,6 +245,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     });
                     ctx.stroke(); // Stroke the path
                 });
+                if (!userId) {
+                    setUserId(user.id);
+                }
+                setUserColor(generateColor(userId!)); // Assign color to the user
             }
         }
     }, [redrawTrigger]); // Redraw when lines change or redrawTrigger changes
@@ -282,17 +286,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             setUserColor(color); // Update the color for the current user
             setCurrentLine(line);
         });
-        socket?.on('stopDrawing', () => {
-            console.log("stopDrawing event received by user", userId);
-            console.log('currentLine: ', currentLine);
-            // setLines((prevLines) => [...prevLines, { drawing: currentLine, color: userColor }]); // Save the line to the state
-            console.log("lines updated (other client): include ", currentLine, userColor);
-            // setUserColor(generateColor(user.id)); // Update the color for the current user
-            // setCurrentLine([]); // Clear the current line
-        });
         return () => {
             socket?.off('draw');
-            socket?.off('stopDrawing');
         };
     }, []);
 
