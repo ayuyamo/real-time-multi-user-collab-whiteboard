@@ -35,6 +35,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [lines, setLines] = useState<{ drawing: Point[]; color: string }[]>([]); // State to store lines with color
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
     const [userColor, setUserColor] = useState<string>('black');
+    const [syncColor, setSyncColor] = useState<string>('black'); // State to store the color of the user    
     const [userId, setUserId] = useState<string | null>(null);
 
     const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
@@ -110,7 +111,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         setIsDrawing(false);
 
         socket?.emit('stopDrawing'); // Emit the stop drawing event to the server
-        await saveStroke({ drawing: currentLine, color: userColor });
+        await saveStroke({ drawing: currentLine, color: syncColor });
         setCurrentLine([]);
     };
 
@@ -261,9 +262,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 // Draw the current line
                 if (currentLine.length > 1) {
-                    console.log('user id is: ', userId);
-                    console.log('user color is: ', generateColor(userId!));
-                    ctx.strokeStyle = userColor;
+                    ctx.strokeStyle = isDrawing ? syncColor : userColor; // Use syncColor if drawing, else use userColor
                     ctx.beginPath();
 
                     const prevPoint = currentLine[currentLine.length - 2];
@@ -283,7 +282,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     // Socket listener to receive drawn lines from other users
     useEffect(() => {
         socket?.on('draw', (line: Point[], color: string) => {
-            setUserColor(color); // Update the color for the current user
+            setSyncColor(color); // Update the color for the current user
             setCurrentLine(line);
         });
         return () => {
