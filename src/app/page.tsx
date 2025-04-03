@@ -9,7 +9,6 @@ import { User } from "@supabase/supabase-js";
 const HomePage = () => {
   // Fetch user and assign color
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   useEffect(() => {
     // Initialize the Socket.IO server
     fetch('/api/socket');
@@ -22,7 +21,6 @@ const HomePage = () => {
       if (session?.user) {
         console.log("User signed in:", session.user.id);
         setUser(session.user);
-        setLoading(false);
       } else {
         console.log("User signed out");
         setUser(null);
@@ -33,12 +31,6 @@ const HomePage = () => {
       authListener?.subscription?.unsubscribe();
     };
   }, []);
-
-  if (loading) {
-    console.log("Loading...");
-    return <div className="flex items-center text-white">Loading...</div>; // design loading component
-  }
-
   return (
     <div>
       {user ? (<Whiteboard user={user} />) : (<LoginPage />)}
