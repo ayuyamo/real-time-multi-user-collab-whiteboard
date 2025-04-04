@@ -17,7 +17,9 @@ interface WhiteboardProps {
 
 // Create a socket connection with the server
 let socket: Socket | null = null;
-
+// TODO: add a loading spinner when the user is signing in
+// TODO: add features to allow users to erase lines, change colors, and change line width
+// TODO: actually allowing multiple users to draw at the same time
 const generateColor = (id: string) => {
     const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const colors = [
@@ -37,12 +39,24 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
     const [userColor, setUserColor] = useState<string>('black');
     const [syncColor, setSyncColor] = useState<string>('black'); // State to store the color of the user
-    const [userId, setUserId] = useState<string | null>(null);
 
     const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
     const [offsetY, setOffsetY] = useState(0); // Vertical pan offset
     const [scale, setScale] = useState(1); // Zoom level
-    const [fetchTrigger, setFetchTrigger] = useState(false); // Trigger to fetch lines from the server
+    const currentLineRef = useRef(currentLine); // Reference to the current line being drawn
+    const linesRef = useRef(lines); // Reference to the lines being drawn
+    const syncColorRef = useRef(syncColor); // Reference to the color of the user
+    useEffect(() => {
+        currentLineRef.current = currentLine; // Update the reference to the current line
+    }, [currentLine]); // Update the reference whenever currentLine changes
+
+    useEffect(() => {
+        linesRef.current = lines; // Update the reference to the lines
+    }, [lines]); // Update the reference whenever lines change
+
+    useEffect(() => {
+        syncColorRef.current = syncColor; // Update the reference to the sync color
+    }, [syncColor]); // Update the reference whenever syncColor changes
 
     // convert coordinates
     const toScreenX = (xTrue: number) => {
@@ -112,6 +126,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         setIsDrawing(false);
 
         socket?.emit('stopDrawing'); // Emit the stop drawing event to the server
+        setLines([...lines, { drawing: currentLine, color: userColor }]); // Update the lines state with the new line
         await saveStroke({ drawing: currentLine, color: userColor });
         setCurrentLine([]);
     };
@@ -135,7 +150,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (leftMouseDown) {    // Left mouse button is down
             draw(e);
         } else if (rightMouseDown) { // Right mouse button is down
-            const dx = e.movementX / scale; // Movement in x direction
+            const dx = e.movementX / scale; // Movement in x direction divided by scale for correct panning
             const dy = e.movementY / scale; // Movement in y direction
             setOffsetX(offsetX + dx); // Update horizontal offset
             setOffsetY(offsetY + dy); // Update vertical offset
@@ -170,13 +185,16 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         setOffsetX(offsetX - unitsAddLeft); // Update horizontal offset
         setOffsetY(offsetY - unitsAddTop); // Update vertical offset
-        setFetchTrigger(!fetchTrigger); // Trigger fetch
         setRedrawTrigger(!redrawTrigger); // Trigger redraw
     };
 
     useEffect(() => {
         // Connect to the Socket.IO server
         socket = io({ path: '/api/socket' });
+
+        if (user) {
+            setUserColor(generateColor(user.id)); // Assign a color to the user based on their ID
+        }
 
         // Handle connection events
         socket.on('connect', () => {
@@ -191,21 +209,23 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             console.log('Received message:', data);
         });
 
+        socket?.on('draw', (line: Point[], color: string) => {
+            console.log('draw signal received -- user id:', user.id);
+            setSyncColor(color); // Set the color of the user who is drawing
+            setCurrentLine(line);
+        });
+        socket?.on('stopDrawing', () => {
+            linesRef.current.push({ drawing: currentLineRef.current, color: syncColorRef.current });
+            setLines([...linesRef.current]); // Update the lines state with the new line
+            setCurrentLine([]); // Clear the current line
+        });
+
         // Clean up on unmount
         return () => {
+            socket?.off('draw');
+            socket?.off('stopDrawing');
             socket?.disconnect();
         };
-    }, []);
-
-    // Fetch user and assign color
-    useEffect(() => {
-        if (user) {
-            setUserId(user.id);
-            setUserColor(generateColor(user.id));
-        } else {
-            setUserId(null);
-            setUserColor('black');
-        }
     }, []);
 
     // Fetch all the lines from the server when the component mounts
@@ -222,13 +242,12 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     color: item.color, // color
                 }));
                 setLines(formattedLines); // Update state with fetched lines
-                // setRedrawTrigger(!redrawTrigger); // Trigger redraw
             }
         };
         fetchLines();
-    }, [fetchTrigger]);
+    }, []);
 
-    // Redraw all lines when the component mounts
+    // Redraw all lines when the component mounts -- perhaps change this to a function that can be called when needed
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -251,7 +270,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         }
     }, [redrawTrigger]); // Redraw when lines change or redrawTrigger changes
 
-    // draw line 
+    // draw line -- perhaps change this to a function that can be called when needed
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -259,8 +278,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 // Draw the current line
                 if (currentLine.length > 1) {
-                    console.log('user id is: ', userId);
-                    console.log('user color is: ', generateColor(userId!));
                     ctx.strokeStyle = isDrawing ? userColor : syncColor;
                     ctx.beginPath();
 
@@ -277,18 +294,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         }
     }, [currentLine]);
 
-
-    // Socket listener to receive drawn lines from other users
-    useEffect(() => {
-        socket?.on('draw', (line: Point[], color: string) => {
-            setSyncColor(color); // Set the color of the user who is drawing
-            setCurrentLine(line);
-        });
-        return () => {
-            socket?.off('draw');
-        };
-    }, []);
-
     // Function to sign out the user
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -297,7 +302,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
     return (
         <div className='flex flex-col items-center justify-center h-screen border border-amber-500 relative'>
-            {userId ? (
+            {user ? (
                 <div>
                     <canvas className='fixed top-0 left-0 w-full h-full z-0 bg-white'
                         ref={canvasRef}
@@ -310,7 +315,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     />
 
                     <div className="absolute top-0 right-0 bg-white p-3 rounded shadow opacity-0 hover:opacity-100 transition-opacity duration-300">
-                        <p className="text-sm font-semibold text-black">👤 User: {userId}</p>
+                        <p className="text-sm font-semibold text-black">👤 User: {user.id}</p>
                         <button
                             onClick={handleSignOut}
                             className="mt-2 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
