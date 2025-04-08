@@ -44,6 +44,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [scale, setScale] = useState(1); // Zoom level
     const currentLineRef = useRef(currentLine); // Reference to the current line being drawn
     const userLinesRef = useRef(userLines); // Reference to the lines drawn by the user
+    const [isZooming, setIsZooming] = useState(false); // State to check if the user is zooming
+    const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the zoom timeout
+
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
     }, [currentLine]); // Update the reference whenever currentLine changes
@@ -179,7 +182,18 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         setOffsetX(offsetX - unitsAddLeft); // Update horizontal offset
         setOffsetY(offsetY - unitsAddTop); // Update vertical offset
+        setIsZooming(true); // Set zooming state to true
         setRedrawTrigger(!redrawTrigger); // Trigger redraw
+
+        // Reset the debounce timer
+        if (zoomTimeoutRef.current) {
+            clearTimeout(zoomTimeoutRef.current);
+        }
+        // Set a new debounce timer
+        zoomTimeoutRef.current = setTimeout(() => {
+            setIsZooming(false); // Set zooming state to false after a delay
+            console.log(`User ${user.id} stopped zooming`);
+        }, 300); // Adjust the delay as needed (300ms in this case)
     };
 
     useEffect(() => {
@@ -264,19 +278,21 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                lines.forEach(({ drawing, color }) => {
-                    ctx.strokeStyle = color;
-                    ctx.beginPath();
-                    drawing.forEach((point, index) => {
-                        if (index === 0) {
-                            ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
-                        } else { // Draw line to the next point
-                            ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
-                        }
+                if (isZooming) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    lines.forEach(({ drawing, color }) => {
+                        ctx.strokeStyle = color;
+                        ctx.beginPath();
+                        drawing.forEach((point, index) => {
+                            if (index === 0) {
+                                ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
+                            } else { // Draw line to the next point
+                                ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
+                            }
+                        });
+                        ctx.stroke(); // Stroke the path
                     });
-                    ctx.stroke(); // Stroke the path
-                });
+                }
 
                 if (Object.keys(userLines).length > 0) {
                     // Draw the current line
