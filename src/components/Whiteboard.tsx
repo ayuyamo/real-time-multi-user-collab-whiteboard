@@ -38,25 +38,19 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
 
     const [userColor, setUserColor] = useState<string>('black');
-    const [syncColor, setSyncColor] = useState<string>('black'); // State to store the color of the user
-
+    const [userLines, setUserLines] = useState<{ [userId: string]: { drawing: Point[]; color: string; } }>({}); // State to store the lines drawn by the user
     const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
     const [offsetY, setOffsetY] = useState(0); // Vertical pan offset
     const [scale, setScale] = useState(1); // Zoom level
     const currentLineRef = useRef(currentLine); // Reference to the current line being drawn
-    const linesRef = useRef(lines); // Reference to the lines being drawn
-    const syncColorRef = useRef(syncColor); // Reference to the color of the user
+    const userLinesRef = useRef(userLines); // Reference to the lines drawn by the user
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
     }, [currentLine]); // Update the reference whenever currentLine changes
 
     useEffect(() => {
-        linesRef.current = lines; // Update the reference to the lines
-    }, [lines]); // Update the reference whenever lines change
-
-    useEffect(() => {
-        syncColorRef.current = syncColor; // Update the reference to the sync color
-    }, [syncColor]); // Update the reference whenever syncColor changes
+        userLinesRef.current = userLines; // Update the reference to the sync color
+    }, [userLines]); // Update the reference whenever syncColor changes
 
     // convert coordinates
     const toScreenX = (xTrue: number) => {
@@ -118,14 +112,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         const newLine = [...currentLine, newPoint];
         setCurrentLine(newLine);
 
-        socket?.emit('draw', newLine, userColor); // Emit the drawing event to the server
+        socket?.emit('draw', newLine, userColor, user.id); // Emit the drawing event to the server
     };
 
     // Stop drawing
     const stopDrawing = async () => { // TODO: make sure once a drawing is complete the lines dont disappear when zoom in/out
         setIsDrawing(false);
 
-        socket?.emit('stopDrawing'); // Emit the stop drawing event to the server
+        socket?.emit('stopDrawing', user.id); // Emit the stop drawing event to the server
         setLines([...lines, { drawing: currentLine, color: userColor }]); // Update the lines state with the new line
         await saveStroke({ drawing: currentLine, color: userColor });
         setCurrentLine([]);
@@ -209,15 +203,32 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             console.log('Received message:', data);
         });
 
-        socket?.on('draw', (line: Point[], color: string) => {
-            console.log('draw signal received -- user id:', user.id);
-            setSyncColor(color); // Set the color of the user who is drawing
-            setCurrentLine(line);
+        socket?.on('draw', (line: Point[], color: string, userId: string) => {
+            console.log('draw signal received -- user id:', userId);
+            // TODO: take account of multiple users drawing at the same time -- cannot use current line as it will be overwritten
+            // setSyncColor(color); // Set the color of the user who is drawing
+            // setCurrentLine(line);
+            // userLinesRef.current[userId] = { drawing: line, color: color }; // Store the line drawn by the user
+            setUserLines((prevUserLines) => {
+                const updatedUserLines = {
+                    ...prevUserLines,
+                    [userId]: { drawing: line, color }, // Add or update the user's current line
+                };
+                userLinesRef.current = updatedUserLines; // Keep the ref in sync with the state
+                return updatedUserLines;
+            });
         });
-        socket?.on('stopDrawing', () => {
-            linesRef.current.push({ drawing: currentLineRef.current, color: syncColorRef.current });
-            setLines([...linesRef.current]); // Update the lines state with the new line
-            setCurrentLine([]); // Clear the current line
+        socket?.on('stopDrawing', (userId: string) => {
+            // linesRef.current.push({ drawing: currentLineRef.current, color: syncColorRef.current });
+            // setLines([...linesRef.current]); // Update the lines state with the new line
+            // setCurrentLine([]); // Clear the current line
+            setUserLines((prevUserLines) => {
+                const updatedUserLines = { ...prevUserLines };
+                delete updatedUserLines[userId]; // Remove the user's line from the state
+                userLinesRef.current = updatedUserLines; // Keep the ref in sync with the state
+                return updatedUserLines; // Update the state with the new userLines
+            });
+            setLines((prevLines) => [...prevLines, userLinesRef.current[userId]]); // Update the lines state with the new line
         });
 
         // Clean up on unmount
@@ -278,7 +289,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 // Draw the current line
                 if (currentLine.length > 1) {
-                    ctx.strokeStyle = isDrawing ? userColor : syncColor;
+                    ctx.strokeStyle = userColor;
                     ctx.beginPath();
 
                     const prevPoint = currentLine[currentLine.length - 2];
@@ -293,7 +304,33 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             }
         }
     }, [currentLine]);
+    // draw line -- perhaps change this to a function that can be called when needed
+    useEffect(() => {
+        console.log('userLines changed:', userLines);
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                if (Object.keys(userLines).length > 0) {
+                    // Draw the current line
+                    Object.keys(userLines).forEach((userId) => {
+                        const { drawing, color } = userLines[userId];
+                        ctx.strokeStyle = color;
+                        ctx.beginPath();
 
+                        const prevPoint = drawing[drawing.length - 2];
+                        const currentPoint = drawing[drawing.length - 1];
+
+                        // Move to the previous point
+                        ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
+                        // Draw a line to the current point
+                        ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
+                        ctx.stroke(); // Stroke the path
+                    });
+                }
+            }
+        }
+    }, [userLines]); // Draw the lines drawn by other users
     // Function to sign out the user
     const handleSignOut = async () => {
         await supabase.auth.signOut();
