@@ -350,7 +350,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
             }
         }
-    }, [lines, userLines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
+    }, [userLines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
 
     // draw line -- perhaps change this to a function that can be called when needed
     useEffect(() => {
@@ -399,20 +399,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         onWheel={onMouseWheel}
                     />
 
-                    <div className="absolute top-0 right-0 bg-white p-3 rounded shadow opacity-0 hover:opacity-100 transition-opacity duration-300">
-                        <div className="flex items-center space-x-2">
+                    <div className="flex justify-center absolute top-0 right-0 bg-white p-3 rounded shadow">
+                        <div className="flex items-center space-x-2 p-2">
                             <div
                                 className="w-4 h-4 rounded-full"
                                 style={{ backgroundColor: userColor }}
                             ></div>
-                            <p className="text-sm font-semibold text-black">{user.user_metadata.userName}</p>
+                            <p className="text-sm font-semibold text-black">{user.user_metadata.email}</p>
+                            <button
+                                onClick={handleSignOut}
+                                className="px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
+                            >
+                                Sign Out
+                            </button>
                         </div>
-                        <button
-                            onClick={handleSignOut}
-                            className="mt-2 px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
-                        >
-                            Sign Out
-                        </button>
 
                     </div>
                     <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-4 hover:scale-110 transition-transform duration-300">
@@ -443,14 +443,22 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         {/* Line Thickness Picker */}
                         <div className="flex items-center space-x-2">
                             <label className="text-sm font-semibold text-black">Thickness:</label>
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
+                            <select
                                 value={lineThickness}
                                 onChange={(e) => setLineThickness(Number(e.target.value))}
-                                className="w-24"
-                            />
+                                className="border border-gray-300 rounded px-2 py-1 text-black"
+                            >
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
                         </div>
                     </div>
                 </div>
