@@ -45,7 +45,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const currentLineRef = useRef(currentLine); // Reference to the current line being drawn
     const userLinesRef = useRef(userLines); // Reference to the lines drawn by the user
     const [isZooming, setIsZooming] = useState(false); // State to check if the user is zooming
+    const [isPanning, setIsPanning] = useState(false); // State to check if the user is panning
     const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the zoom timeout
+    const panningTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the panning timeout
 
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
@@ -152,7 +154,18 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             setOffsetX(offsetX + dx); // Update horizontal offset
             setOffsetY(offsetY + dy); // Update vertical offset
             setRedrawTrigger(!redrawTrigger); // Trigger redraw
+            setIsPanning(true); // Set panning state to true
+            // Reset the debounce timer
+            if (panningTimeoutRef.current) {
+                clearTimeout(panningTimeoutRef.current);
+            }
+            // Set a new debounce timer
+            panningTimeoutRef.current = setTimeout(() => {
+                setIsPanning(false); // Set panning state to false after a delay
+                console.log(`User ${user.id} stopped panning`);
+            }, 300); // Adjust the delay as needed (300ms in this case)
         }
+
     };
 
     const onMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
@@ -278,7 +291,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                if (isZooming) {
+                if (isZooming || isPanning) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     lines.forEach(({ drawing, color }) => {
                         ctx.strokeStyle = color;
