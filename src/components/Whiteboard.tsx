@@ -305,6 +305,24 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         });
                         ctx.stroke(); // Stroke the path
                     });
+
+                    if (Object.keys(userLines).length > 0) {
+                        // Draw the current line
+                        Object.keys(userLines).forEach((userId) => {
+                            const { drawing, color } = userLines[userId];
+                            ctx.strokeStyle = color;
+                            ctx.beginPath();
+
+                            const prevPoint = drawing[drawing.length - 2];
+                            const currentPoint = drawing[drawing.length - 1];
+
+                            // Move to the previous point
+                            ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
+                            // Draw a line to the current point
+                            ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
+                            ctx.stroke(); // Stroke the path
+                        });
+                    }
                 }
 
                 if (Object.keys(userLines).length > 0) {
