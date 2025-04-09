@@ -5,6 +5,7 @@ import saveStroke from '@/components/supabase/saveStrokes';
 import supabase from '@/components/supabase/supabase-auth';
 import { User } from '@supabase/supabase-js';
 import { io } from 'socket.io-client';
+import ColorPalette from './whiteboard-props/color-palette';
 // TODO: change user color back to original color when one user stop drawing
 interface Point {
     x: number;
@@ -49,6 +50,16 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the zoom timeout
     const panningTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the panning timeout
     const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
+    const [isPaletteOpen, setIsPaletteOpen] = useState(false); // State to check if the color palette is open
+
+    const togglePalette = () => {
+        setIsPaletteOpen(!isPaletteOpen); // Toggle the color palette visibility
+    };
+
+    const handleColorSelect = (color: string) => {
+        setUserColor(color); // Set the selected color
+        setIsPaletteOpen(false); // Close the color palette
+    };
 
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
@@ -214,10 +225,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     useEffect(() => {
         // Connect to the Socket.IO server
         socket = io({ path: '/api/socket' });
-
-        if (user) {
-            setUserColor(generateColor(user.id)); // Assign a color to the user based on their ID
-        }
 
         // Handle connection events
         socket.on('connect', () => {
@@ -418,7 +425,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-4 hover:scale-110 transition-transform duration-300">
                         {/* Color Picker */}
                         <div className="flex items-center space-x-2">
-                            <label className="text-sm font-semibold text-black">Color:</label>
+                            <label className="text-sm font-semibold text-black">Colors:</label>
                             <button
                                 className="w-6 h-6 rounded-full bg-red-500 border-2 border-gray-300 hover:scale-110 transition-transform"
                                 onClick={() => setUserColor('red')}
@@ -436,10 +443,23 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                                 onClick={() => setUserColor('#ec4899')}
                             ></button>
                             <button
+                                className="w-6 h-6 rounded-full bg-yellow-300 border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('#fcd34d')}
+                            ></button>
+                            <button
                                 className="w-6 h-6 rounded-full bg-black border-2 border-gray-300 hover:scale-110 transition-transform"
                                 onClick={() => setUserColor('black')}
                             ></button>
+                            <button
+                                className="px-3 py-1 bg-gray-300 text-black rounded hover:bg-gray-400 transition-transform"
+                                onClick={togglePalette}
+                            >
+                                Palette
+                            </button>
+                            {/* TODO: add feature to delete lines */}
                         </div>
+                        {isPaletteOpen && <ColorPalette onSelectColor={handleColorSelect} />}
+
                         {/* Line Thickness Picker */}
                         <div className="flex items-center space-x-2">
                             <label className="text-sm font-semibold text-black">Thickness:</label>
