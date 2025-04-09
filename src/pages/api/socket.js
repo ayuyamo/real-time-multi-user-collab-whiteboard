@@ -24,9 +24,9 @@ const SocketHandler = (req, res) => {
       console.log('Number of clients connected:', num_clients);
 
       // listen for drawing events from the client
-      socket.on('draw', (line, color, userId) => {
+      socket.on('draw', (line, color, lineThickness, userId) => {
           console.log('draw', line);
-          socket.broadcast.emit('draw', line, color, userId); // broadcast drawing to all other clients
+          socket.broadcast.emit('draw', line, color, lineThickness, userId); // broadcast drawing to all other clients
       });
       // listen for stop drawing event from the client
       socket.on('stopDrawing', (userId) => {

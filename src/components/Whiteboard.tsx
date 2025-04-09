@@ -34,11 +34,11 @@ const generateColor = (id: string) => {
 const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
     const [isDrawing, setIsDrawing] = useState<boolean>(false); // State to check if the user is drawing
-    const [lines, setLines] = useState<{ drawing: Point[]; color: string }[]>([]); // State to store lines with color
+    const [lines, setLines] = useState<{ drawing: Point[]; color: string; lineWidth: number }[]>([]); // State to store lines with color
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
 
     const [userColor, setUserColor] = useState<string>('black');
-    const [userLines, setUserLines] = useState<{ [userId: string]: { drawing: Point[]; color: string; } }>({}); // State to store the lines drawn by the user
+    const [userLines, setUserLines] = useState<{ [userId: string]: { drawing: Point[]; color: string; lineWidth: number; } }>({}); // State to store the lines drawn by the user
     const [offsetX, setOffsetX] = useState(0); // Horizontal pan offset
     const [offsetY, setOffsetY] = useState(0); // Vertical pan offset
     const [scale, setScale] = useState(1); // Zoom level
@@ -48,6 +48,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [isPanning, setIsPanning] = useState(false); // State to check if the user is panning
     const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the zoom timeout
     const panningTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the panning timeout
+    const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
 
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
@@ -117,7 +118,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         const newLine = [...currentLine, newPoint];
         setCurrentLine(newLine);
 
-        socket?.emit('draw', newLine, userColor, user.id); // Emit the drawing event to the server
+        socket?.emit('draw', newLine, userColor, lineThickness, user.id); // Emit the drawing event to the server
     };
 
     // Stop drawing
@@ -125,8 +126,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         setIsDrawing(false);
 
         socket?.emit('stopDrawing', user.id); // Emit the stop drawing event to the server
-        setLines([...lines, { drawing: currentLine, color: userColor }]); // Update the lines state with the new line
-        await saveStroke({ drawing: currentLine, color: userColor });
+        setLines([...lines, { drawing: currentLine, color: userColor, lineWidth: lineThickness }]); // Update the lines state with the new line
+        await saveStroke({ drawing: currentLine, color: userColor, lineWidth: lineThickness }); // Save the stroke to the database
+        console.log('Stroke saved:', currentLine, userColor, lineThickness);
         setCurrentLine([]);
     };
 
@@ -230,25 +232,19 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             console.log('Received message:', data);
         });
 
-        socket?.on('draw', (line: Point[], color: string, userId: string) => {
+        socket?.on('draw', (line: Point[], color: string, width: number, userId: string) => {
             console.log('draw signal received -- user id:', userId);
-            // TODO: take account of multiple users drawing at the same time -- cannot use current line as it will be overwritten
-            // setSyncColor(color); // Set the color of the user who is drawing
-            // setCurrentLine(line);
-            // userLinesRef.current[userId] = { drawing: line, color: color }; // Store the line drawn by the user
             setUserLines((prevUserLines) => {
                 const updatedUserLines = {
                     ...prevUserLines,
-                    [userId]: { drawing: line, color }, // Add or update the user's current line
+                    [userId]: { drawing: line, color: color, lineWidth: width }, // Add or update the user's current line
                 };
                 userLinesRef.current = updatedUserLines; // Keep the ref in sync with the state
                 return updatedUserLines;
             });
+            console.log('userLines:', userLinesRef.current);
         });
         socket?.on('stopDrawing', (userId: string) => {
-            // linesRef.current.push({ drawing: currentLineRef.current, color: syncColorRef.current });
-            // setLines([...linesRef.current]); // Update the lines state with the new line
-            // setCurrentLine([]); // Clear the current line
             setUserLines((prevUserLines) => {
                 const updatedUserLines = { ...prevUserLines };
                 delete updatedUserLines[userId]; // Remove the user's line from the state
@@ -269,7 +265,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     // Fetch all the lines from the server when the component mounts
     useEffect(() => {
         const fetchLines = async () => {
-            const { data, error } = await supabase.from('drawing-rooms').select('drawing, color');
+            const { data, error } = await supabase.from('drawing-rooms').select('drawing, color, line_width');
             if (error) {
                 console.error('Error fetching lines:', error.message);
                 return;
@@ -278,6 +274,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                 const formattedLines = data.map((item: any) => ({
                     drawing: item.drawing, // array of points (Point[][])
                     color: item.color, // color
+                    lineWidth: item.line_width, // line width
                 }));
                 setLines(formattedLines); // Update state with fetched lines
             }
@@ -293,7 +290,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 if (isZooming || isPanning) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    lines.forEach(({ drawing, color }) => {
+                    lines.forEach(({ drawing, color, lineWidth }) => {
+                        ctx.lineWidth = lineWidth; // Set the line width
+                        ctx.lineCap = 'round'; // Set the line cap style
+                        ctx.lineJoin = 'round'; // Set the line join style
                         ctx.strokeStyle = color;
                         ctx.beginPath();
                         drawing.forEach((point, index) => {
@@ -308,7 +308,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     if (Object.keys(userLines).length > 0) {
                         // Draw the current line
                         Object.keys(userLines).forEach((userId) => {
-                            const { drawing, color } = userLines[userId];
+                            const { drawing, color, lineWidth } = userLines[userId];
+                            ctx.lineWidth = lineWidth; // Set the line width
+                            ctx.lineCap = 'round'; // Set the line cap style
+                            ctx.lineJoin = 'round'; // Set the line join style
                             ctx.strokeStyle = color;
                             ctx.beginPath();
 
@@ -322,25 +325,29 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             ctx.stroke(); // Stroke the path
                         });
                     }
+                } else {
+                    if (Object.keys(userLines).length > 0) {
+                        // Draw the current line
+                        Object.keys(userLines).forEach((userId) => {
+                            const { drawing, color, lineWidth } = userLines[userId];
+                            ctx.strokeStyle = color;
+                            ctx.lineWidth = lineWidth; // Set the line width
+                            ctx.lineCap = 'round'; // Set the line cap style
+                            ctx.lineJoin = 'round'; // Set the line join style
+                            ctx.beginPath();
+
+                            const prevPoint = drawing[drawing.length - 2];
+                            const currentPoint = drawing[drawing.length - 1];
+
+                            // Move to the previous point
+                            ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
+                            // Draw a line to the current point
+                            ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
+                            ctx.stroke(); // Stroke the path
+                        });
+                    }
                 }
 
-                if (Object.keys(userLines).length > 0) {
-                    // Draw the current line
-                    Object.keys(userLines).forEach((userId) => {
-                        const { drawing, color } = userLines[userId];
-                        ctx.strokeStyle = color;
-                        ctx.beginPath();
-
-                        const prevPoint = drawing[drawing.length - 2];
-                        const currentPoint = drawing[drawing.length - 1];
-
-                        // Move to the previous point
-                        ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
-                        // Draw a line to the current point
-                        ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
-                        ctx.stroke(); // Stroke the path
-                    });
-                }
             }
         }
     }, [lines, userLines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
@@ -351,6 +358,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
+                ctx.lineWidth = lineThickness; // Set the line width
+                ctx.lineCap = 'round'; // Set the line cap style
+                ctx.lineJoin = 'round'; // Set the line join style
                 // Draw the current line
                 if (currentLine.length > 1) {
                     ctx.strokeStyle = userColor;
@@ -368,33 +378,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             }
         }
     }, [currentLine]);
-    // // draw line -- perhaps change this to a function that can be called when needed
-    // useEffect(() => {
-    //     console.log('userLines changed:', userLines);
-    //     const canvas = canvasRef.current;
-    //     if (canvas) {
-    //         const ctx = canvas.getContext('2d');
-    //         if (ctx) {
-    //             if (Object.keys(userLines).length > 0) {
-    //                 // Draw the current line
-    //                 Object.keys(userLines).forEach((userId) => {
-    //                     const { drawing, color } = userLines[userId];
-    //                     ctx.strokeStyle = color;
-    //                     ctx.beginPath();
 
-    //                     const prevPoint = drawing[drawing.length - 2];
-    //                     const currentPoint = drawing[drawing.length - 1];
-
-    //                     // Move to the previous point
-    //                     ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
-    //                     // Draw a line to the current point
-    //                     ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
-    //                     ctx.stroke(); // Stroke the path
-    //                 });
-    //             }
-    //         }
-    //     }
-    // }, [userLines]); // Draw the lines drawn by other users
     // Function to sign out the user
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -416,14 +400,58 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     />
 
                     <div className="absolute top-0 right-0 bg-white p-3 rounded shadow opacity-0 hover:opacity-100 transition-opacity duration-300">
-                        <p className="text-sm font-semibold text-black">👤 User: {user.id}</p>
+                        <div className="flex items-center space-x-2">
+                            <div
+                                className="w-4 h-4 rounded-full"
+                                style={{ backgroundColor: userColor }}
+                            ></div>
+                            <p className="text-sm font-semibold text-black">{user.user_metadata.userName}</p>
+                        </div>
                         <button
                             onClick={handleSignOut}
-                            className="mt-2 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                            className="mt-2 px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
                         >
                             Sign Out
                         </button>
 
+                    </div>
+                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-4 hover:scale-110 transition-transform duration-300">
+                        {/* Color Picker */}
+                        <div className="flex items-center space-x-2">
+                            <label className="text-sm font-semibold text-black">Color:</label>
+                            <button
+                                className="w-6 h-6 rounded-full bg-red-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('red')}
+                            ></button>
+                            <button
+                                className="w-6 h-6 rounded-full bg-blue-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('blue')}
+                            ></button>
+                            <button
+                                className="w-6 h-6 rounded-full bg-green-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('green')}
+                            ></button>
+                            <button
+                                className="w-6 h-6 rounded-full bg-pink-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('#ec4899')}
+                            ></button>
+                            <button
+                                className="w-6 h-6 rounded-full bg-black border-2 border-gray-300 hover:scale-110 transition-transform"
+                                onClick={() => setUserColor('black')}
+                            ></button>
+                        </div>
+                        {/* Line Thickness Picker */}
+                        <div className="flex items-center space-x-2">
+                            <label className="text-sm font-semibold text-black">Thickness:</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={lineThickness}
+                                onChange={(e) => setLineThickness(Number(e.target.value))}
+                                className="w-24"
+                            />
+                        </div>
                     </div>
                 </div>
 

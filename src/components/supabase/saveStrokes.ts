@@ -6,13 +6,15 @@ interface Stroke {
     y: number;
   }[];
   color: string;
+  lineWidth: number;
 }
 // Function to save a stroke
-async function saveStroke({ drawing, color }: Stroke) {
+async function saveStroke({ drawing, color, lineWidth }: Stroke) {
   const { data, error } = await supabase.from('drawing-rooms').insert([
     {
       drawing: drawing,
       color: color,
+      line_width: lineWidth,
       user_id: (await supabase.auth.getUser()).data.user?.id,
     },
   ]);
