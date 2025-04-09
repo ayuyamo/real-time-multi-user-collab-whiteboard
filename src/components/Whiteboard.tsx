@@ -6,7 +6,8 @@ import supabase from '@/components/supabase/supabase-auth';
 import { User } from '@supabase/supabase-js';
 import { io } from 'socket.io-client';
 import ColorPalette from './whiteboard-props/color-palette';
-// TODO: change user color back to original color when one user stop drawing
+import ThicknessSelector from './whiteboard-props/thichness-selector';
+
 interface Point {
     x: number;
     y: number;
@@ -20,17 +21,6 @@ interface WhiteboardProps {
 let socket: Socket | null = null;
 // TODO: add a loading spinner when the user is signing in
 // TODO: add features to allow users to erase lines, change colors, and change line width
-// TODO: actually allowing multiple users to draw at the same time
-const generateColor = (id: string) => {
-    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const colors = [
-        'red', 'blue', 'green', 'purple', 'orange', 'teal', 'pink', 'cyan',
-        'yellow', 'brown', 'magenta', 'lime', 'indigo', 'violet', 'gold', 'silver',
-        'navy', 'maroon', 'turquoise', 'coral', 'salmon', 'plum', 'olive', 'orchid'
-    ];
-
-    return colors[hash % colors.length];
-};
 
 const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
@@ -289,6 +279,48 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         fetchLines();
     }, []);
 
+    // Function to draw a single line
+    const drawLine = (ctx: CanvasRenderingContext2D, drawing: Point[], color: string, lineWidth: number) => {
+        ctx.lineWidth = lineWidth; // Set the line width
+        ctx.lineCap = 'round'; // Set the line cap style
+        ctx.lineJoin = 'round'; // Set the line join style
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        drawing.forEach((point, index) => {
+            if (index === 0) {
+                ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
+            } else {
+                ctx.lineTo(toScreenX(point.x), toScreenY(point.y)); // Draw line to the next point
+            }
+        });
+        ctx.stroke(); // Stroke the path
+    };
+
+    // Function to draw all lines
+    const drawAllLines = (ctx: CanvasRenderingContext2D, lines: { drawing: Point[]; color: string; lineWidth: number }[]) => {
+        lines.forEach(({ drawing, color, lineWidth }) => {
+            drawLine(ctx, drawing, color, lineWidth);
+        });
+    };
+
+    // Function to draw the current line
+    const drawCurrentLine = (ctx: CanvasRenderingContext2D, currentLine: Point[], color: string, lineWidth: number) => {
+        if (currentLine.length > 1) {
+            const prevPoint = currentLine[currentLine.length - 2];
+            const currentPoint = currentLine[currentLine.length - 1];
+            ctx.lineWidth = lineWidth; // Set the line width
+            ctx.lineCap = 'round'; // Set the line cap style
+            ctx.lineJoin = 'round'; // Set the line join style
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y)); // Move to the previous point
+            ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y)); // Draw a line to the current point
+            ctx.stroke(); // Stroke the path
+        }
+    };
+
+
+
     // Redraw all lines when the component mounts -- perhaps change this to a function that can be called when needed
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -297,60 +329,21 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             if (ctx) {
                 if (isZooming || isPanning) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    lines.forEach(({ drawing, color, lineWidth }) => {
-                        ctx.lineWidth = lineWidth; // Set the line width
-                        ctx.lineCap = 'round'; // Set the line cap style
-                        ctx.lineJoin = 'round'; // Set the line join style
-                        ctx.strokeStyle = color;
-                        ctx.beginPath();
-                        drawing.forEach((point, index) => {
-                            if (index === 0) {
-                                ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
-                            } else { // Draw line to the next point
-                                ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
-                            }
-                        });
-                        ctx.stroke(); // Stroke the path
-                    });
+                    drawAllLines(ctx, lines); // Draw all lines
                     if (Object.keys(userLines).length > 0) {
-                        // Draw the current line
+                        // Draw the current line of other users
                         Object.keys(userLines).forEach((userId) => {
                             const { drawing, color, lineWidth } = userLines[userId];
-                            ctx.lineWidth = lineWidth; // Set the line width
-                            ctx.lineCap = 'round'; // Set the line cap style
-                            ctx.lineJoin = 'round'; // Set the line join style
-                            ctx.strokeStyle = color;
-                            ctx.beginPath();
-
-                            drawing.forEach((point, index) => {
-                                if (index === 0) {
-                                    ctx.moveTo(toScreenX(point.x), toScreenY(point.y)); // Move to the first point
-                                } else { // Draw line to the next point
-                                    ctx.lineTo(toScreenX(point.x), toScreenY(point.y));
-                                }
-                            });
-                            ctx.stroke(); // Stroke the path
+                            drawLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
+
                     }
                 } else {
                     if (Object.keys(userLines).length > 0) {
                         // Draw the current line
                         Object.keys(userLines).forEach((userId) => {
                             const { drawing, color, lineWidth } = userLines[userId];
-                            ctx.strokeStyle = color;
-                            ctx.lineWidth = lineWidth; // Set the line width
-                            ctx.lineCap = 'round'; // Set the line cap style
-                            ctx.lineJoin = 'round'; // Set the line join style
-                            ctx.beginPath();
-
-                            const prevPoint = drawing[drawing.length - 2];
-                            const currentPoint = drawing[drawing.length - 1];
-
-                            // Move to the previous point
-                            ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
-                            // Draw a line to the current point
-                            ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
-                            ctx.stroke(); // Stroke the path
+                            drawCurrentLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
                     }
                 }
@@ -365,23 +358,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.lineWidth = lineThickness; // Set the line width
-                ctx.lineCap = 'round'; // Set the line cap style
-                ctx.lineJoin = 'round'; // Set the line join style
-                // Draw the current line
-                if (currentLine.length > 1) {
-                    ctx.strokeStyle = userColor;
-                    ctx.beginPath();
-
-                    const prevPoint = currentLine[currentLine.length - 2];
-                    const currentPoint = currentLine[currentLine.length - 1];
-
-                    // Move to the previous point
-                    ctx.moveTo(toScreenX(prevPoint.x), toScreenY(prevPoint.y));
-                    // Draw a line to the current point
-                    ctx.lineTo(toScreenX(currentPoint.x), toScreenY(currentPoint.y));
-                    ctx.stroke(); // Stroke the path
-                }
+                drawCurrentLine(ctx, currentLine, userColor, lineThickness); // Draw the current line
             }
         }
     }, [currentLine]);
@@ -422,64 +399,44 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         </div>
 
                     </div>
-                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-4 hover:scale-110 transition-transform duration-300">
+                    <div className="items-center absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-2 hover:scale-110 transition-transform duration-300">
                         {/* Color Picker */}
-                        <div className="flex items-center space-x-2">
-                            <label className="text-sm font-semibold text-black">Colors:</label>
-                            <button
-                                className="w-6 h-6 rounded-full bg-red-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('red')}
-                            ></button>
-                            <button
-                                className="w-6 h-6 rounded-full bg-blue-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('blue')}
-                            ></button>
-                            <button
-                                className="w-6 h-6 rounded-full bg-green-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('green')}
-                            ></button>
-                            <button
-                                className="w-6 h-6 rounded-full bg-pink-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('#ec4899')}
-                            ></button>
-                            <button
-                                className="w-6 h-6 rounded-full bg-yellow-300 border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('#fcd34d')}
-                            ></button>
-                            <button
-                                className="w-6 h-6 rounded-full bg-black border-2 border-gray-300 hover:scale-110 transition-transform"
-                                onClick={() => setUserColor('black')}
-                            ></button>
-                            <button
-                                className="px-3 py-1 bg-gray-300 text-black rounded hover:bg-gray-400 transition-transform"
-                                onClick={togglePalette}
-                            >
-                                Palette
-                            </button>
-                            {/* TODO: add feature to delete lines */}
-                        </div>
+                        <button
+                            className="w-6 h-6 rounded-full bg-red-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('red')}
+                        ></button>
+                        <button
+                            className="w-6 h-6 rounded-full bg-blue-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('blue')}
+                        ></button>
+                        <button
+                            className="w-6 h-6 rounded-full bg-green-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('green')}
+                        ></button>
+                        <button
+                            className="w-6 h-6 rounded-full bg-pink-500 border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('#ec4899')}
+                        ></button>
+                        <button
+                            className="w-6 h-6 rounded-full bg-yellow-300 border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('#fcd34d')}
+                        ></button>
+                        <button
+                            className="w-6 h-6 rounded-full bg-black border-2 border-gray-300 hover:scale-110 transition-transform"
+                            onClick={() => setUserColor('black')}
+                        ></button>
+                        <button
+                            className="px-3 py-1 bg-gray-300 text-black rounded hover:bg-gray-400 transition-transform"
+                            onClick={togglePalette}
+                        >
+                            Palette
+                        </button>
+                        {/* TODO: add feature to delete lines */}
                         {isPaletteOpen && <ColorPalette onSelectColor={handleColorSelect} />}
 
                         {/* Line Thickness Picker */}
-                        <div className="flex items-center space-x-2">
-                            <label className="text-sm font-semibold text-black">Thickness:</label>
-                            <select
-                                value={lineThickness}
-                                onChange={(e) => setLineThickness(Number(e.target.value))}
-                                className="border border-gray-300 rounded px-2 py-1 text-black"
-                            >
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                                <option value="9">9</option>
-                                <option value="10">10</option>
-                            </select>
-                        </div>
+                        <ThicknessSelector lineThickness={lineThickness} setLineThickness={setLineThickness} />
+
                     </div>
                 </div>
 

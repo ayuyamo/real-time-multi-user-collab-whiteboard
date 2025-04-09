@@ -38,7 +38,7 @@ const ColorPalette: React.FC<{ onSelectColor: (color: string) => void }> = ({ on
     ];
 
     return (
-        <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded shadow grid grid-cols-5 gap-2">
+        <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-white rounded shadow grid grid-cols-5 gap-2 p-2 w-[200px] h-auto">
             {colors.map((color) => (
                 <button
                     key={color}
