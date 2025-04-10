@@ -41,6 +41,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const panningTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the panning timeout
     const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
     const [isPaletteOpen, setIsPaletteOpen] = useState(false); // State to check if the color palette is open
+    const [isRefreshing, setIsRefreshing] = useState(false); // State to check if the canvas is refreshing
 
     const togglePalette = () => {
         setIsPaletteOpen(!isPaletteOpen); // Toggle the color palette visibility
@@ -274,6 +275,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     lineWidth: item.line_width, // line width
                 }));
                 setLines(formattedLines); // Update state with fetched lines
+                setIsRefreshing(true); // Set refreshing state to true
+                setRedrawTrigger(!redrawTrigger); // Trigger redraw
             }
         };
         fetchLines();
@@ -327,7 +330,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                if (isZooming || isPanning) {
+                if (isZooming || isPanning || isRefreshing) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     drawAllLines(ctx, lines); // Draw all lines
                     if (Object.keys(userLines).length > 0) {
@@ -337,6 +340,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             drawLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
 
+                    }
+                    if (isRefreshing) {
+                        setIsRefreshing(false); // Reset refreshing state
                     }
                 } else {
                     if (Object.keys(userLines).length > 0) {
