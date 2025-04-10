@@ -9,7 +9,7 @@ const ThicknessSelector: React.FC<ThicknessSelectorProps> = ({ lineThickness, se
     const [isOpen, setIsOpen] = useState(false);
 
     return (
-        <div className="relative inline-block">
+        <div className="relative inline-block hover:scale-105 transition-transform duration-200">
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="border border-gray-300 rounded px-4 py-1 bg-white text-black flex items-center justify-between min-w-[80px]"

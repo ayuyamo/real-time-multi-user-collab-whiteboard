@@ -42,6 +42,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
     const [isPaletteOpen, setIsPaletteOpen] = useState(false); // State to check if the color palette is open
     const [isRefreshing, setIsRefreshing] = useState(false); // State to check if the canvas is refreshing
+    const [redrawTrigger, setRedrawTrigger] = useState(false);
 
     const togglePalette = () => {
         setIsPaletteOpen(!isPaletteOpen); // Toggle the color palette visibility
@@ -86,7 +87,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         return canvasRef.current.clientWidth / scale;
     };
 
-
     // Function to get the canvas position
     const getCanvasPos = (e: MouseEvent<HTMLCanvasElement>): Point => {
         if (!canvasRef.current) {
@@ -98,7 +98,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         return { x, y };
     };
-
 
     // Start drawing
     const startDrawing = (e: MouseEvent<HTMLCanvasElement>) => {
@@ -147,7 +146,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         }
     };
 
-    const [redrawTrigger, setRedrawTrigger] = useState(false);
 
     const onMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
         if (leftMouseDown) {    // Left mouse button is down
@@ -339,7 +337,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             const { drawing, color, lineWidth } = userLines[userId];
                             drawLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
-
                     }
                     if (isRefreshing) {
                         setIsRefreshing(false); // Reset refreshing state
@@ -389,21 +386,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         onWheel={onMouseWheel}
                     />
 
-                    <div className="flex justify-center absolute top-0 right-0 bg-white p-3 rounded shadow">
-                        <div className="flex items-center space-x-2 p-2">
+                    <div className="flex justify-center absolute top-0 right-0 bg-white p-5 space-x-2 rounded shadow">
+                        <div className='flex items-center group hover:scale-110 transition-transform duration-300'>
                             <div
-                                className="w-4 h-4 rounded-full"
+                                className="w-4 h-4 rounded-full p-2"
                                 style={{ backgroundColor: userColor }}
                             ></div>
-                            <p className="text-sm font-semibold text-black">{user.user_metadata.email}</p>
-                            <button
-                                onClick={handleSignOut}
-                                className="px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
-                            >
-                                Sign Out
-                            </button>
+                            <p className="text-sm font-semibold text-black p-2">{user.user_metadata.email}</p>
                         </div>
-
+                        <button
+                            onClick={handleSignOut}
+                            className="px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
+                        >
+                            Sign Out
+                        </button>
                     </div>
                     <div className="items-center absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-4 bg-white p-3 rounded shadow flex space-x-2 hover:scale-110 transition-transform duration-300">
                         {/* Color Picker */}
@@ -432,7 +428,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             onClick={() => setUserColor('black')}
                         ></button>
                         <button
-                            className="px-3 py-1 bg-gray-300 text-black rounded hover:bg-gray-400 transition-transform"
+                            className="px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
                             onClick={togglePalette}
                         >
                             Palette
