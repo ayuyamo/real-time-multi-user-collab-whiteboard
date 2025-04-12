@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useState, useRef, MouseEvent, use } from 'react';
 import { Socket } from 'socket.io-client';
-import saveStroke from '@/components/supabase/saveStrokes';
+import { saveStroke, deleteLines, fetchLines } from '@/components/supabase/dataMod';
 import supabase from '@/components/supabase/supabase-auth';
 import { User } from '@supabase/supabase-js';
 import { io } from 'socket.io-client';
 import ColorPalette from './whiteboard-props/color-palette';
 import ThicknessSelector from './whiteboard-props/thichness-selector';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Point {
     x: number;
@@ -25,7 +26,7 @@ let socket: Socket | null = null;
 const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null); // Reference to the canvas element
     const [isDrawing, setIsDrawing] = useState<boolean>(false); // State to check if the user is drawing
-    const [lines, setLines] = useState<{ drawing: Point[]; color: string; lineWidth: number }[]>([]); // State to store lines with color
+    const [lines, setLines] = useState<{ uuid: string; drawing: Point[]; color: string; lineWidth: number }[]>([]); // State to store lines with color
     const [currentLine, setCurrentLine] = useState<Point[]>([]); // State to store the current line being drawn by the user
 
     const [userColor, setUserColor] = useState<string>('black');
@@ -41,11 +42,15 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const panningTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the panning timeout
     const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
     const [isPaletteOpen, setIsPaletteOpen] = useState(false); // State to check if the color palette is open
-    const [isRefreshing, setIsRefreshing] = useState(false); // State to check if the canvas is refreshing
+    const [isReloading, setIsReloading] = useState(false); // State to check if the canvas is refreshing
     const [redrawTrigger, setRedrawTrigger] = useState(false);
+    const [isEraserMode, setIsEraserMode] = useState(false); // State to check if the eraser mode is active
+    const [selectingThickness, setSelectingThickness] = useState(false);
+
 
     const togglePalette = () => {
         setIsPaletteOpen(!isPaletteOpen); // Toggle the color palette visibility
+        setIsEraserMode(false); // Disable eraser mode when the palette is open
     };
 
     const handleColorSelect = (color: string) => {
@@ -108,6 +113,15 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         }
         setCurrentLine([newPoint]);
     };
+    // eraser mode
+    const isEraserOverLine = (e: MouseEvent<HTMLCanvasElement>, line: Point[], baseThreshold = 10) => {
+        const adjustedThreshold = baseThreshold / scale;
+        return line.some((point) => {
+            const dx = point.x - toTrueX(getCanvasPos(e).x);
+            const dy = point.y - toTrueY(getCanvasPos(e).y);
+            return Math.sqrt(dx * dx + dy * dy) < adjustedThreshold;
+        });
+    };
 
     // Draw on canvas
     const draw = (e: MouseEvent<HTMLCanvasElement>) => {
@@ -126,10 +140,11 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const stopDrawing = async () => { // TODO: make sure once a drawing is complete the lines dont disappear when zoom in/out
         setIsDrawing(false);
 
-        socket?.emit('stopDrawing', user.id); // Emit the stop drawing event to the server
-        setLines([...lines, { drawing: currentLine, color: userColor, lineWidth: lineThickness }]); // Update the lines state with the new line
-        await saveStroke({ drawing: currentLine, color: userColor, lineWidth: lineThickness }); // Save the stroke to the database
-        console.log('Stroke saved:', currentLine, userColor, lineThickness);
+        const newUUID = uuidv4(); // Generate a new UUID for the line
+        socket?.emit('stopDrawing', user.id, newUUID); // Emit the stop drawing event to the server
+        setLines([...lines, { uuid: newUUID, drawing: currentLine, color: userColor, lineWidth: lineThickness }]); // Update the lines state with the new line
+        await saveStroke({ uuid: newUUID, drawing: currentLine, color: userColor, lineWidth: lineThickness }); // Save the stroke to the database
+        console.log('Stroke saved:', newUUID, currentLine, userColor, lineThickness);
         setCurrentLine([]);
     };
 
@@ -139,7 +154,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (e.button === 0) { // Left mouse button
             setLeftMouseDown(true);
             setRightMouseDown(false);
-            startDrawing(e);
+            if (!isEraserMode) {
+                startDrawing(e);
+            }
         } else if (e.button === 2) { // Right mouse button
             setRightMouseDown(true);
             setLeftMouseDown(false);
@@ -147,9 +164,34 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     };
 
 
-    const onMouseMove = (e: MouseEvent<HTMLCanvasElement>) => {
+    const onMouseMove = async (e: MouseEvent<HTMLCanvasElement>) => {
         if (leftMouseDown) {    // Left mouse button is down
-            draw(e);
+            if (isEraserMode) {
+                // const ctx = canvasRef.current?.getContext('2d');
+                // if (!ctx) return;
+                // ctx.clearRect(toScreenX(toTrueX(getCanvasPos(e).x)), toScreenY(toTrueY(getCanvasPos(e).y)), 20, 20); // Clear the area around the cursor
+
+                const linesToDelete = lines.filter((line) =>
+                    isEraserOverLine(e, line.drawing)
+                );
+
+                if (linesToDelete.length > 0) {
+                    // Remove all at once
+                    setLines((prevLines) =>
+                        prevLines.filter((l) => !linesToDelete.includes(l))
+                    );
+                    const idsToDelete = linesToDelete.map((line) => line.uuid);
+
+                    await deleteLines(idsToDelete); // Delete the lines from the database
+                    loadLines(); // Reload lines from the server
+
+                    // Emit once per line, or batch (depending on how your socket is set up)
+                    // TODO: do later
+                    socket?.emit('linesDeleted', user.id); // Emit the delete event to the server
+                }
+            } else {
+                draw(e);
+            }
         } else if (rightMouseDown) { // Right mouse button is down
             const dx = e.movementX / scale; // Movement in x direction divided by scale for correct panning
             const dy = e.movementY / scale; // Movement in y direction
@@ -167,13 +209,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                 console.log(`User ${user.id} stopped panning`);
             }, 300); // Adjust the delay as needed (300ms in this case)
         }
-
     };
 
     const onMouseUp = (e: MouseEvent<HTMLCanvasElement>) => {
         if (leftMouseDown) { // Left mouse button
             setLeftMouseDown(false);
-            stopDrawing();
+            if (!isEraserMode) {
+                stopDrawing(); // Stop drawing
+            }
         } else if (rightMouseDown) { // Right mouse button
             setRightMouseDown(false);
         }
@@ -210,6 +253,16 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             console.log(`User ${user.id} stopped zooming`);
         }, 300); // Adjust the delay as needed (300ms in this case)
     };
+    // Load line
+    // s from the server when the component mounts or data changes
+    const loadLines = async () => {
+        const fetchedLines = await fetchLines();  // Fetch lines from server
+        console.log('Fetched lines:', fetchedLines); // Log the fetched lines
+        console.log('reloading lines...'); // Log the redraw trigger state
+        setIsReloading(true);                    // Optional: show UI is updated
+        setLines(fetchedLines);                   // Update canvas state
+        setRedrawTrigger(!redrawTrigger); // Trigger redraw
+    };
 
     useEffect(() => {
         // Connect to the Socket.IO server
@@ -240,14 +293,19 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             });
             console.log('userLines:', userLinesRef.current);
         });
-        socket?.on('stopDrawing', (userId: string) => {
+        socket?.on('stopDrawing', (userId: string, uuid: string) => {
             setUserLines((prevUserLines) => {
                 const updatedUserLines = { ...prevUserLines };
                 delete updatedUserLines[userId]; // Remove the user's line from the state
                 userLinesRef.current = updatedUserLines; // Keep the ref in sync with the state
                 return updatedUserLines; // Update the state with the new userLines
             });
-            setLines((prevLines) => [...prevLines, userLinesRef.current[userId]]); // Update the lines state with the new line
+            setLines((prevLines) => [...prevLines, { uuid: uuid, ...userLinesRef.current[userId] }]); // Update the lines state with the new line
+        });
+
+        socket?.on('linesDeleted', () => {
+            setIsReloading(true); // Set the refreshing state to true
+            loadLines(); // Reload lines from the server
         });
 
         // Clean up on unmount
@@ -258,26 +316,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         };
     }, []);
 
+
     // Fetch all the lines from the server when the component mounts
     useEffect(() => {
-        const fetchLines = async () => {
-            const { data, error } = await supabase.from('drawing-rooms').select('drawing, color, line_width');
-            if (error) {
-                console.error('Error fetching lines:', error.message);
-                return;
-            } else {
-                // Format the data to fit our structure
-                const formattedLines = data.map((item: any) => ({
-                    drawing: item.drawing, // array of points (Point[][])
-                    color: item.color, // color
-                    lineWidth: item.line_width, // line width
-                }));
-                setLines(formattedLines); // Update state with fetched lines
-                setIsRefreshing(true); // Set refreshing state to true
-                setRedrawTrigger(!redrawTrigger); // Trigger redraw
-            }
-        };
-        fetchLines();
+        loadLines();
     }, []);
 
     // Function to draw a single line
@@ -328,7 +370,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                if (isZooming || isPanning || isRefreshing) {
+                if (isZooming || isPanning || isReloading) {
+                    console.log('Redrawing canvas...'); // Log the redraw trigger state
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     drawAllLines(ctx, lines); // Draw all lines
                     if (Object.keys(userLines).length > 0) {
@@ -338,8 +381,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             drawLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
                     }
-                    if (isRefreshing) {
-                        setIsRefreshing(false); // Reset refreshing state
+                    if (isReloading) {
+                        setIsReloading(false); // Reset refreshing state
                     }
                 } else {
                     if (Object.keys(userLines).length > 0) {
@@ -365,6 +408,11 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             }
         }
     }, [currentLine]);
+
+    useEffect(() => {
+        console.log('Eraser mode:', isEraserMode);
+    }
+        , [isEraserMode]); // Log the eraser mode state
 
     // Function to sign out the user
     const handleSignOut = async () => {
@@ -405,27 +453,27 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         {/* Color Picker */}
                         <button
                             className="w-6 h-6 rounded-full bg-red-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('red')}
+                            onClick={() => { setUserColor('red'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="w-6 h-6 rounded-full bg-blue-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('blue')}
+                            onClick={() => { setUserColor('blue'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="w-6 h-6 rounded-full bg-green-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('green')}
+                            onClick={() => { setUserColor('#22c55e'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="w-6 h-6 rounded-full bg-pink-500 border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('#ec4899')}
+                            onClick={() => { setUserColor('#ec4899'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="w-6 h-6 rounded-full bg-yellow-300 border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('#fcd34d')}
+                            onClick={() => { setUserColor('#fcd34d'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="w-6 h-6 rounded-full bg-black border-2 border-gray-300 hover:scale-110 transition-transform"
-                            onClick={() => setUserColor('black')}
+                            onClick={() => { setUserColor('black'); setIsEraserMode(false); }}
                         ></button>
                         <button
                             className="px-3 py-1 bg-gray-400 text-white text-sm hover:bg-gray-500 rounded-full hover:scale-110 transition-transform duration-200"
@@ -435,9 +483,46 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                         </button>
                         {/* TODO: add feature to delete lines */}
                         {isPaletteOpen && <ColorPalette onSelectColor={handleColorSelect} />}
+                        <button
+                            className={`px-3 py-1 text-white text-sm rounded-full transition-transform duration-200 
+                                        ${isEraserMode ? 'bg-gray-600 scale-110' : 'bg-gray-400 hover:bg-gray-500 hover:scale-110'}`}
+                            onClick={() => setIsEraserMode(!isEraserMode)}
+                        >
+                            Eraser
+                        </button>
+                        <div className="relative inline-block hover:scale-105 transition-transform duration-200">
+                            <button
+                                onClick={() => { setSelectingThickness(!selectingThickness); setIsEraserMode(false); }}
+                                className="border border-gray-300 rounded px-4 py-1 bg-white text-black flex items-center justify-between min-w-[80px]"
+                            >
+                                <div className="w-full h-4 flex items-center justify-center">
+                                    <div
+                                        className="w-full bg-black"
+                                        style={{ height: `${lineThickness}px` }}
+                                    />
+                                </div>
+                            </button>
 
-                        {/* Line Thickness Picker */}
-                        <ThicknessSelector lineThickness={lineThickness} setLineThickness={setLineThickness} />
+                            {selectingThickness && (
+                                <ul className="absolute z-10 bottom-full w-full bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((thickness) => (
+                                        <li
+                                            key={thickness}
+                                            onClick={() => {
+                                                setLineThickness(thickness);
+                                                setSelectingThickness(false);
+                                            }}
+                                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center"
+                                        >
+                                            <div
+                                                className="bg-black w-full"
+                                                style={{ height: `${thickness}px` }}
+                                            />
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
 
                     </div>
                 </div>
