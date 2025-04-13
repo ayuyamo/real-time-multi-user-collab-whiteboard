@@ -36,6 +36,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [scale, setScale] = useState(1); // Zoom level
     const currentLineRef = useRef(currentLine); // Reference to the current line being drawn
     const userLinesRef = useRef(userLines); // Reference to the lines drawn by the user
+    const linesRef = useRef(lines); // Reference to the lines drawn by all users
     const [isZooming, setIsZooming] = useState(false); // State to check if the user is zooming
     const [isPanning, setIsPanning] = useState(false); // State to check if the user is panning
     const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Reference to the zoom timeout
@@ -43,9 +44,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     const [lineThickness, setLineThickness] = useState(1); // State to store the line thickness
     const [isPaletteOpen, setIsPaletteOpen] = useState(false); // State to check if the color palette is open
     const [isReloading, setIsReloading] = useState(false); // State to check if the canvas is refreshing
-    const [redrawTrigger, setRedrawTrigger] = useState(false);
     const [isEraserMode, setIsEraserMode] = useState(false); // State to check if the eraser mode is active
     const [selectingThickness, setSelectingThickness] = useState(false);
+    const [screenChanged, setScreenChanged] = useState(false); // State to check if the screen has changed
 
 
     const togglePalette = () => {
@@ -61,6 +62,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     useEffect(() => {
         currentLineRef.current = currentLine; // Update the reference to the current line
     }, [currentLine]); // Update the reference whenever currentLine changes
+
+    useEffect(() => {
+        linesRef.current = lines; // Update the reference to the lines
+    }, [lines]); // Update the reference whenever lines changes
 
     useEffect(() => {
         userLinesRef.current = userLines; // Update the reference to the sync color
@@ -180,14 +185,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                     setLines((prevLines) =>
                         prevLines.filter((l) => !linesToDelete.includes(l))
                     );
+                    socket?.emit('deleteLines', user.id, linesToDelete); // Emit the delete event to the server
                     const idsToDelete = linesToDelete.map((line) => line.uuid);
-
-                    await deleteLines(idsToDelete); // Delete the lines from the database
-                    loadLines(); // Reload lines from the server
-
-                    // Emit once per line, or batch (depending on how your socket is set up)
-                    // TODO: do later
-                    socket?.emit('linesDeleted', user.id); // Emit the delete event to the server
+                    deleteLines(idsToDelete); // Delete the lines from the database
                 }
             } else {
                 draw(e);
@@ -197,8 +197,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             const dy = e.movementY / scale; // Movement in y direction
             setOffsetX(offsetX + dx); // Update horizontal offset
             setOffsetY(offsetY + dy); // Update vertical offset
-            setRedrawTrigger(!redrawTrigger); // Trigger redraw
             setIsPanning(true); // Set panning state to true
+            setScreenChanged(!screenChanged); // Trigger a screen change
             // Reset the debounce timer
             if (panningTimeoutRef.current) {
                 clearTimeout(panningTimeoutRef.current);
@@ -241,7 +241,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         setOffsetX(offsetX - unitsAddLeft); // Update horizontal offset
         setOffsetY(offsetY - unitsAddTop); // Update vertical offset
         setIsZooming(true); // Set zooming state to true
-        setRedrawTrigger(!redrawTrigger); // Trigger redraw
+        setScreenChanged(!screenChanged); // Trigger a screen change
 
         // Reset the debounce timer
         if (zoomTimeoutRef.current) {
@@ -253,15 +253,12 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             console.log(`User ${user.id} stopped zooming`);
         }, 300); // Adjust the delay as needed (300ms in this case)
     };
-    // Load line
-    // s from the server when the component mounts or data changes
+    // Load lines from the server when the component mounts or data changes
     const loadLines = async () => {
         const fetchedLines = await fetchLines();  // Fetch lines from server
         console.log('Fetched lines:', fetchedLines); // Log the fetched lines
         console.log('reloading lines...'); // Log the redraw trigger state
-        setIsReloading(true);                    // Optional: show UI is updated
         setLines(fetchedLines);                   // Update canvas state
-        setRedrawTrigger(!redrawTrigger); // Trigger redraw
     };
 
     useEffect(() => {
@@ -303,9 +300,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             setLines((prevLines) => [...prevLines, { uuid: uuid, ...userLinesRef.current[userId] }]); // Update the lines state with the new line
         });
 
-        socket?.on('linesDeleted', () => {
-            setIsReloading(true); // Set the refreshing state to true
-            loadLines(); // Reload lines from the server
+        socket?.on('deleteLines', (userId: string, linesToDelete: {
+            uuid: string;
+            drawing: {
+                x: number;
+                y: number;
+            }[];
+            color: string;
+            lineWidth: number;
+        }[]) => {
+            console.log('deleteLines signal received -- user id:', userId);
+            console.log('lines to delete:', linesToDelete);
+            setLines((prevLines) =>
+                prevLines.filter((line) => !linesToDelete.some((l) => l.uuid === line.uuid))
+            );
         });
 
         // Clean up on unmount
@@ -315,7 +323,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
             socket?.disconnect();
         };
     }, []);
-
 
     // Fetch all the lines from the server when the component mounts
     useEffect(() => {
@@ -370,8 +377,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                if (isZooming || isPanning || isReloading) {
-                    console.log('Redrawing canvas...'); // Log the redraw trigger state
+                if (isZooming || isPanning) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     drawAllLines(ctx, lines); // Draw all lines
                     if (Object.keys(userLines).length > 0) {
@@ -380,9 +386,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
                             const { drawing, color, lineWidth } = userLines[userId];
                             drawLine(ctx, drawing, color, lineWidth); // Draw the user's line
                         });
-                    }
-                    if (isReloading) {
-                        setIsReloading(false); // Reset refreshing state
                     }
                 } else {
                     if (Object.keys(userLines).length > 0) {
@@ -396,7 +399,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
             }
         }
-    }, [userLines, redrawTrigger]); // Redraw when lines change or redrawTrigger changes
+    }, [userLines, screenChanged]); // Redraw when lines change or redrawTrigger changes
 
     // draw line -- perhaps change this to a function that can be called when needed
     useEffect(() => {
@@ -410,9 +413,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
     }, [currentLine]);
 
     useEffect(() => {
+        console.log('redrawTrigger triggered'); // Log the redraw trigger state
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawAllLines(ctx, lines); // Draw all lines
+            }
+        }
+    }, [lines]);
+
+    useEffect(() => {
         console.log('Eraser mode:', isEraserMode);
-    }
-        , [isEraserMode]); // Log the eraser mode state
+    }, [isEraserMode]); // Log the eraser mode state
 
     // Function to sign out the user
     const handleSignOut = async () => {

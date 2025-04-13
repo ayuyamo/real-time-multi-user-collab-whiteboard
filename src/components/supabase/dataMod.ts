@@ -37,7 +37,7 @@ async function deleteLines(linesToDelete: string[]) {
   if (error) {
     console.error('Error deleting lines:', error);
   } else {
-    console.log('Lines deleted');
+    console.log('Lines deleted from database');
   }
 }
 
