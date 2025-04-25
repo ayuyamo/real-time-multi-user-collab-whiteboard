@@ -147,6 +147,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ user }) => {
 
         const newUUID = uuidv4(); // Generate a new UUID for the line
         socket?.emit('stopDrawing', user.id, newUUID); // Emit the stop drawing event to the server
+        if (currentLine.length < 1) return; // If the line is too short, do not save it
         setLines([...lines, { uuid: newUUID, drawing: currentLine, color: userColor, lineWidth: lineThickness }]); // Update the lines state with the new line
         await saveStroke({ uuid: newUUID, drawing: currentLine, color: userColor, lineWidth: lineThickness }); // Save the stroke to the database
         console.log('Stroke saved:', newUUID, currentLine, userColor, lineThickness);
